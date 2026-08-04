@@ -1,0 +1,13 @@
+build/
+build-noeditor/
+out/
+.cache/
+*.o
+*.obj
+*.a
+*.lib
+.vscode/
+.idea/
+compile_commands.json
+.reasonix/
+

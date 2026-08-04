@@ -1,0 +1,355 @@
+#version 430 core
+// ember simulation — dispatch with uPhase=0 (simulate), then uPhase=1 (spawn).
+layout(local_size_x = 64) in;
+
+struct Particle {
+    vec4 pos;   // xyz position, w = size
+    vec4 vel;   // xyz velocity, w = age
+    vec4 life;  // x = lifetime (negative => corpse slot owned by the free stack)
+    vec4 color; // rgba
+};
+
+layout(binding = 0, std430) readonly  buffer BufCur   { Particle cur[]; };
+layout(binding = 1, std430) writeonly buffer BufNext  { Particle nxt[]; };
+// Spawn requests: the CPU encodes emitters/bursts as compact requests; this
+// shader samples the actual particles (shape, cone, palette, fade, size<->speed
+// link) with its own hash RNG. Layout matches ember::SpawnRequest (std430).
+struct SpawnRequest {
+    vec4  colorMin;
+    vec4  colorMax;
+    vec3  position;
+    float radius;
+    vec3  axis;          // cone axis (normalized; zero = no cone)
+    float coneAngle;     // degrees; >0 => cone emission
+    vec3  dir;           // normalized base velocity (zero = uniform sphere)
+    float spread;        // 0..1 mix toward a random sphere direction
+    vec3  extents;       // box half-extents
+    float speedMin;      // already includes speedScale
+    float speedMax;
+    float speedSizeLink; // per-particle: speed *= 1 + link*(size/sizeMid - 1)
+    float lifeMin;
+    float lifeMax;
+    float sizeMin;
+    float sizeMax;
+    int   shape;         // 0 point, 1 box, 2 sphere, 3 cone
+    int   paletteIdx;    // base index into the palette buffer (-1 = colorMin/Max)
+    int   hasFade;       // write life.yzw = fade target
+    uint  base;          // prefix offset: spawns work ids [base, base+count)
+    uint  count;
+    int   paletteCount;  // colors in this palette range
+    vec3  fadeMin;       // fade target range (RGB)
+    uint  pad2;
+    vec3  fadeMax;
+    uint  pad3;
+};
+layout(binding = 2, std430) readonly  buffer BufSpawnReq { SpawnRequest req[]; };
+layout(binding = 9, std430) readonly  buffer BufPalette { vec4 palette[]; };
+layout(binding = 10, std430) writeonly buffer BufIndirectArgs { // uPhase=2 write (draw count)
+    uint vertexCount;    // always 4 (quad)
+    uint instanceCount;  // alive
+    uint firstVertex;    // 0
+    uint baseInstance;   // 0
+} indirectArgs;
+layout(binding = 3, std430) coherent  buffer BufDead  { uint dead[]; };
+layout(binding = 4, std430) coherent  buffer BufCtr   {
+    uint uAlive;
+    uint uDeadHead;
+    uint uSpawnRequestCount;
+    uint uCapacity;
+};
+layout(binding = 5, std430) readonly buffer BufAttr { vec4 attractors[]; };
+
+struct Vortex {
+    vec4 center;        // xyz position, w = radius (falloff scale)
+    vec4 axisStrength;  // xyz axis, w = strength
+};
+layout(binding = 6, std430) readonly buffer BufVortex { Vortex vortexes[]; };
+
+struct Spring {
+    vec3  anchor;
+    float stiffness;
+    float damping;
+};
+layout(binding = 7, std430) readonly buffer BufSpring { Spring springs[]; };
+
+// ---------------------------------------------------------------------------
+// Force switches. bit i corresponds to ember::Force enum value i:
+//   0 gravity   1 drag   2 wind   3 turbulence   4 attractors
+//   5 vortex    6 spring 7 noise_wind          8 wave    9 boundary
+// ---------------------------------------------------------------------------
+uniform uint uForceMask;
+
+uniform vec3  uGravity;
+uniform float uDrag;
+uniform int   uDragMode;      // 0 = linear, 1 = quadratic
+uniform vec3  uWind;
+uniform float uTurbulence;
+uniform int   uAttractorCount;
+uniform int   uVortexCount;
+uniform int   uSpringCount;
+uniform vec3  uNoiseWindDir;
+uniform float uNoiseWindAmp;
+uniform float uNoiseWindScale;
+uniform float uNoiseWindSpeed;
+uniform vec3  uWaveDir;
+uniform vec3  uWaveK;
+uniform float uWaveAmp;
+uniform float uWaveOmega;
+uniform int   uBoundaryMode;  // 1 = kill, 2 = bounce (mask bit 9 must be set)
+uniform float uBoundaryY;
+uniform float uRestitution;
+uniform float uDt;
+uniform float uTime;
+uniform int   uPhase;
+uniform uint  uSpawnTotal;     // total particles requested this frame (phase 1)
+uniform uint  uFrameSeed;      // per-frame RNG seed (phase 1)
+
+// Deterministic hash RNG (splitmix-ish) — per-particle state derived from the
+// work id + frame seed, so concurrent spawn threads never share mutable state.
+uint hashUint(uint x) {
+    x ^= x >> 16;
+    x *= 0x7feb352du;
+    x ^= x >> 15;
+    x *= 0x846ca68bu;
+    x ^= x >> 16;
+    return x;
+}
+float rngUnit(inout uint s) { s = hashUint(s + 0x9E3779B9u); return float(s) / 4294967296.0; }
+float rngRange(inout uint s, float a, float b) { return a + (b - a) * rngUnit(s); }
+vec3 rngSphere(inout uint s) {
+    float z = rngRange(s, -1.0, 1.0);
+    float a = rngRange(s, 0.0, 6.283185307179586);
+    float r = sqrt(max(0.0, 1.0 - z * z));
+    return vec3(r * cos(a), r * sin(a), z);
+}
+vec3 rngVec3(inout uint s, vec3 a, vec3 b) {
+    return vec3(rngRange(s, a.x, b.x), rngRange(s, a.y, b.y), rngRange(s, a.z, b.z));
+}
+void basis(vec3 ax, out vec3 u, out vec3 v) {
+    u = normalize(cross(ax, abs(ax.y) > 0.9 ? vec3(1, 0, 0) : vec3(0, 1, 0)));
+    v = cross(ax, u);
+}
+
+vec3 samplePosition(inout uint s, SpawnRequest r) {
+    if (r.shape == 1) { // box
+        return r.position + rngVec3(s, -r.extents, r.extents);
+    }
+    if (r.shape == 2) { // sphere (uniform radius, matching the CPU sampler)
+        return r.position + rngSphere(s) * rngRange(s, 0.0, r.radius);
+    }
+    if (r.shape == 3) { // cone base disc
+        vec3 ax = length(r.axis) > 1e-4 ? normalize(r.axis) : vec3(0, 1, 0);
+        vec3 u, v; basis(ax, u, v);
+        float rad = r.radius * sqrt(rngUnit(s));
+        float a = rngRange(s, 0.0, 6.283185307179586);
+        return r.position + (u * cos(a) + v * sin(a)) * rad;
+    }
+    return r.position; // point
+}
+
+vec3 sampleDirection(inout uint s, SpawnRequest r) {
+    if (r.coneAngle > 0.0 && length(r.axis) > 1e-4) {
+        vec3 ax = normalize(r.axis);
+        vec3 u, v; basis(ax, u, v);
+        float cosA = cos(radians(r.coneAngle));
+        float cosT = mix(cosA, 1.0, rngUnit(s)); // cos-weighted on the cap
+        float sinT = sqrt(max(0.0, 1.0 - cosT * cosT));
+        float phi = rngRange(s, 0.0, 6.283185307179586);
+        return normalize(ax * cosT + (u * cos(phi) + v * sin(phi)) * sinT);
+    }
+    float bl = length(r.dir);
+    if (bl < 1e-4) return rngSphere(s);
+    if (r.spread <= 0.01) return normalize(r.dir);
+    return normalize(mix(normalize(r.dir), rngSphere(s), r.spread));
+}
+
+void spawnFromRequest(uint j) {
+    if (j >= uSpawnTotal) return;
+    // Requests are sorted by ascending base — binary search the owner.
+    int lo = 0, hi = int(uSpawnRequestCount) - 1;
+    while (lo < hi) {
+        int mid = (lo + hi + 1) >> 1;
+        if (req[mid].base <= j) lo = mid;
+        else hi = mid - 1;
+    }
+    SpawnRequest r = req[lo];
+    uint s = uFrameSeed ^ (j * 0x9E3779B9u);
+
+    // ---- sample the particle (mirrors the CPU Emitter::spawn formulas) ----
+    Particle p;
+    float size = rngRange(s, r.sizeMin, r.sizeMax);
+    p.pos = vec4(samplePosition(s, r), size);
+    vec3 dirv = sampleDirection(s, r);
+    float speed = rngRange(s, r.speedMin, r.speedMax);
+    if (r.speedSizeLink > 0.0) {
+        float sizeMid = 0.5 * (r.sizeMin + r.sizeMax);
+        if (sizeMid > 0.0) speed *= 1.0 + r.speedSizeLink * (size / sizeMid - 1.0);
+    }
+    p.vel = vec4(dirv * speed, 0.0); // age starts at 0
+    p.life.x = rngRange(s, r.lifeMin, r.lifeMax);
+    if (r.paletteIdx >= 0 && r.paletteCount > 0) {
+        int ci = r.paletteIdx + int(rngUnit(s) * float(r.paletteCount)) % r.paletteCount;
+        p.color = palette[ci];
+    } else {
+        p.color = vec4(rngRange(s, r.colorMin.r, r.colorMax.r),
+                       rngRange(s, r.colorMin.g, r.colorMax.g),
+                       rngRange(s, r.colorMin.b, r.colorMax.b),
+                       rngRange(s, r.colorMin.a, r.colorMax.a));
+    }
+    // Fade target color (RGB) goes into life.yzw; unset => identity (no shift).
+    if (r.hasFade != 0) p.life.yzw = rngVec3(s, r.fadeMin, r.fadeMax);
+    else p.life.yzw = p.color.rgb;
+
+    // ---- slot recycling / append (unchanged from the pre-request path) ----
+    uint old = uDeadHead;
+    while (old > 0u) {
+        if (atomicCompSwap(uDeadHead, old, old - 1u) == old) {
+            uint slot = dead[(old - 1u) % uCapacity];
+            atomicAdd(uAlive, 1u); // the recycled particle is alive (its death already decremented)
+            nxt[slot] = p;
+            return;
+        }
+        old = uDeadHead;
+    }
+    // Stack empty — append instead (capacity guarded).
+    uint slot = atomicAdd(uAlive, 1u);
+    if (slot >= uCapacity) {
+        atomicAdd(uAlive, -1u); // capacity reached: drop this particle
+        return;
+    }
+    nxt[slot] = p;
+}
+
+float hash11(vec3 p) {
+    p = fract(p * 0.1031);
+    p += dot(p, p.yzx + 33.33);
+    return fract((p.x + p.y) * p.z);
+}
+
+// Smooth 3D value noise (lattice interpolation) — drifting gust-like turbulence.
+// (name avoids the built-in noise3() family from GLSL)
+float snoise3(vec3 x) {
+    vec3 i = floor(x);
+    vec3 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    float n000 = hash11(i);
+    float n100 = hash11(i + vec3(1, 0, 0));
+    float n010 = hash11(i + vec3(0, 1, 0));
+    float n110 = hash11(i + vec3(1, 1, 0));
+    float n001 = hash11(i + vec3(0, 0, 1));
+    float n101 = hash11(i + vec3(1, 0, 1));
+    float n011 = hash11(i + vec3(0, 1, 1));
+    float n111 = hash11(i + vec3(1, 1, 1));
+    return mix(
+        mix(mix(n000, n100, f.x), mix(n010, n110, f.x), f.y),
+        mix(mix(n001, n101, f.x), mix(n011, n111, f.x), f.y),
+        f.z);
+}
+
+// Kill a particle: recycle its slot, shrink the alive count, leave a corpse marker.
+void retire(uint i) {
+    uint h = atomicAdd(uDeadHead, 1u);
+    dead[h % uCapacity] = i;
+    atomicAdd(uAlive, -1u);
+    nxt[i] = Particle(vec4(0.0), vec4(0.0), vec4(-1.0), vec4(0.0));
+}
+
+void simulate(uint i) {
+    Particle p = cur[i];
+    if (p.life.x < 0.0) return;          // corpse: slot belongs to the free stack
+    // NaN guard: a NaN particle is retired instead of poisoning the buffer
+    // (NaN positions can also stall some drivers during rasterization).
+    if (isnan(p.pos.x) || isnan(p.pos.y) || isnan(p.pos.z) ||
+        isnan(p.vel.x) || isnan(p.vel.y) || isnan(p.vel.z)) {
+        retire(i);
+        return;
+    }
+    p.vel.w += uDt;                      // age
+    if (p.vel.w >= p.life.x) {
+        retire(i);
+        return;
+    }
+
+    // ---- force accumulation (each term guarded by uForceMask) -------------
+    vec3 acc = vec3(0.0);
+    if ((uForceMask & (1u << 0u)) != 0u) acc += uGravity;                 // gravity
+    if ((uForceMask & (1u << 1u)) != 0u) {                                // drag
+        if (uDragMode == 1) acc -= p.vel.xyz * length(p.vel.xyz) * uDrag; // quadratic
+        else acc -= p.vel.xyz * uDrag;                                    // linear
+    }
+    if ((uForceMask & (1u << 2u)) != 0u) acc += uWind;                    // uniform wind
+    if ((uForceMask & (1u << 3u)) != 0u && uTurbulence > 0.0) {           // turbulence
+        vec3 n = vec3(snoise3(p.pos.xyz * 0.3 + uTime),
+                      snoise3(p.pos.xyz * 0.3 + uTime * 1.31 + 7.7),
+                      snoise3(p.pos.xyz * 0.3 + uTime * 0.67 + 3.3));
+        acc += (n * 2.0 - 1.0) * uTurbulence;
+    }
+    if ((uForceMask & (1u << 4u)) != 0u) {                                // point attractors
+        for (int k = 0; k < uAttractorCount; ++k) {
+            vec3 d = attractors[k].xyz - p.pos.xyz;
+            float r2 = dot(d, d) + 1e-4;     // softening
+            float inv = inversesqrt(r2);
+            acc += d * (attractors[k].w * inv * inv * inv); // inverse-square, sign = attract/repel
+        }
+    }
+    if ((uForceMask & (1u << 5u)) != 0u && uVortexCount > 0) {            // vortex swirls
+        for (int k = 0; k < uVortexCount; ++k) {
+            Vortex v = vortexes[k];
+            vec3 d = v.center.xyz - p.pos.xyz;
+            float r2 = dot(d, d) + 1e-4;
+            float fall = v.axisStrength.w / (r2 + v.center.w * v.center.w); // smooth core, ~1/r² outside
+            acc += cross(v.axisStrength.xyz, d) * fall;                     // tangential swirl
+        }
+    }
+    if ((uForceMask & (1u << 6u)) != 0u && uSpringCount > 0) {            // spring-to-anchor
+        for (int k = 0; k < uSpringCount; ++k) {
+            Spring s = springs[k];
+            vec3 d = s.anchor - p.pos.xyz;
+            acc += d * s.stiffness - p.vel.xyz * s.damping;
+        }
+    }
+    if ((uForceMask & (1u << 7u)) != 0u && uNoiseWindAmp > 0.0) {         // spatial noise wind
+        float n = snoise3(p.pos.xyz * uNoiseWindScale + uTime * uNoiseWindSpeed);
+        acc += uNoiseWindDir * (n * 2.0 - 1.0) * uNoiseWindAmp;
+    }
+    if ((uForceMask & (1u << 8u)) != 0u && uWaveAmp > 0.0) {              // traveling wave
+        float phase = dot(p.pos.xyz, uWaveK) + uTime * uWaveOmega;
+        acc += uWaveDir * (sin(phase) * uWaveAmp);
+    }
+
+    // Semi-implicit Euler integration.
+    p.vel.xyz += acc * uDt;
+    p.pos.xyz += p.vel.xyz * uDt;
+    p.vel.xyz = clamp(p.vel.xyz, vec3(-500.0), vec3(500.0)); // explode guard
+
+    // ---- boundary plane (y < uBoundaryY) -----------------------------------
+    if ((uForceMask & (1u << 9u)) != 0u && uBoundaryMode != 0 && p.pos.y < uBoundaryY) {
+        if (uBoundaryMode == 1) {          // kill
+            retire(i);
+            return;
+        }
+        p.pos.y = uBoundaryY;              // bounce
+        p.vel.y = -p.vel.y * uRestitution;
+        if (abs(p.vel.y) < 0.1) p.vel.y = 0.0; // settle on the plane
+    }
+    nxt[i] = p;
+}
+
+void main() {
+    if (uPhase == 0) {
+        uint i = gl_GlobalInvocationID.x;
+        if (i >= uAlive) return;
+        simulate(i);
+    } else if (uPhase == 1) {
+        spawnFromRequest(gl_GlobalInvocationID.x);
+    } else if (uPhase == 2) {
+        // Publish the draw count for glDrawArraysIndirect (host no longer needs
+        // the per-frame alive readback to issue the draw).
+        if (gl_GlobalInvocationID.x == 0u) {
+            indirectArgs.vertexCount = 4u;
+            indirectArgs.instanceCount = uAlive;
+            indirectArgs.firstVertex = 0u;
+            indirectArgs.baseInstance = 0u;
+        }
+    }
+}

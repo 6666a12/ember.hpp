@@ -1,0 +1,49 @@
+@PACKAGE_INIT@
+
+# ember CMake package.
+#
+# The installed library links against glad/glm (and glfw for ember_glfw).
+# Provide those dependencies before calling find_package(ember):
+#   - via your own FetchContent / add_subdirectory, or
+#   - as installed packages (gladConfig.cmake / glmConfig.cmake / glfw3Config.cmake).
+#
+# Usage:
+#   find_package(ember REQUIRED)
+#   target_link_libraries(app PRIVATE ember::ember)          # core only
+#   target_link_libraries(app PRIVATE ember::ember_glfw)     # + GLFW convenience module
+
+include(CMakeFindDependencyMacro)
+find_dependency(glm)
+find_dependency(glad)
+find_dependency(glfw3 QUIET)   # only needed when consuming ember::ember_glfw
+
+# Helper: append a dependency target to an imported ember target if it exists
+# under either its plain name or its namespaced name.
+function(_ember_append_dep _imported _dep)
+  if(TARGET "${_dep}")
+    set_property(TARGET "${_imported}" APPEND PROPERTY INTERFACE_LINK_LIBRARIES "${_dep}")
+  elseif(TARGET "${_dep}::${_dep}")
+    set_property(TARGET "${_imported}" APPEND PROPERTY INTERFACE_LINK_LIBRARIES "${_dep}::${_dep}")
+  endif()
+endfunction()
+
+if(NOT TARGET ember::ember)
+  add_library(ember::ember STATIC IMPORTED)
+  set_target_properties(ember::ember PROPERTIES
+    IMPORTED_LOCATION "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/@CMAKE_STATIC_LIBRARY_PREFIX@ember@CMAKE_STATIC_LIBRARY_SUFFIX@"
+    INTERFACE_INCLUDE_DIRECTORIES "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_INCLUDEDIR@")
+  _ember_append_dep(ember::ember glad)
+  _ember_append_dep(ember::ember glm)
+endif()
+
+if(NOT TARGET ember::ember_glfw)
+  add_library(ember::ember_glfw STATIC IMPORTED)
+  set_target_properties(ember::ember_glfw PROPERTIES
+    IMPORTED_LOCATION "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/@CMAKE_STATIC_LIBRARY_PREFIX@ember_glfw@CMAKE_STATIC_LIBRARY_SUFFIX@"
+    INTERFACE_INCLUDE_DIRECTORIES "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_INCLUDEDIR@")
+  _ember_append_dep(ember::ember_glfw glad)
+  _ember_append_dep(ember::ember_glfw glm)
+  _ember_append_dep(ember::ember_glfw glfw)
+endif()
+
+check_required_components(ember)
