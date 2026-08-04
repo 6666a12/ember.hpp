@@ -1,30 +1,65 @@
-// ember.hpp — single-header edition of the ember GPU particle library.
-//
-// GENERATED FILE — do not edit by hand. Regenerate with:
-//     python tools/amalgamate.py
-// (after changing include/ember/*.hpp or src/*.cpp)
-//
-// Usage (one translation unit):
-//     #define EMBER_IMPLEMENTATION
-//     #include "ember.hpp"
-// Optional feature macros:
-//     EMBER_USE_GLFW — include the GLFW window convenience module
-//     EMBER_USE_STB  — PNG sprite support; define STB_IMAGE_IMPLEMENTATION
-//                      somewhere (e.g. in the same TU, before this include)
-//
-// External dependencies (documented in INTEGRATION docs):
-//   * glad  — OpenGL 4.3 core loader; the generated gl.h must be includeable
-//             as <glad/gl.h> and its implementation TU (glad.c) linked.
-//   * glm   — header-only math library (>= 0.9.9).
-//   * GLFW  — only with EMBER_USE_GLFW (window convenience module).
-//   * stb_image.h — only with EMBER_USE_STB (PNG sprites); without it
-//             setSpriteTexture falls back to the built-in gradient.
-//
-// License: MIT (see LICENSE).
+/* ============================================================================
+ * ember.hpp — ember GPU particle library · single-header edition
+ * ============================================================================
+ * GENERATED FILE — do not edit by hand. Regenerate with:
+ *     python tools/amalgamate.py           (--verify checks for drift)
+ * ============================================================================
+ * CONTENTS
+ *   SECTION A — DECLARATIONS (types, classes, inline helpers)
+ *     [ 1] ember/gl.hpp            GL loading + error helpers (needs glad)
+ *     [ 2] ember/core.hpp          Particle, force types, Rng
+ *     [ 3] ember/emitters.hpp      Emitter + SpawnRequest (GPU spawn requests)
+ *     [ 4] ember/gpu.hpp           Buffer / Texture / VertexArray RAII
+ *     [ 5] ember/shader.hpp        Shader — uniform-cached GL program
+ *     [ 6] ember/config.hpp        INI-style Config parser (loadConfig/apply)
+ *     [ 7] ember/particle_system.hpp  ParticleSystem (simulation + rendering)
+ *     [ 8] ember/glfw_window.hpp   [EMBER_USE_GLFW] GLFW convenience window
+ *   SECTION B — IMPLEMENTATION (compile ONCE, see below)
+ *     [ 9] src/shader.cpp
+ *     [10] src/particle_system.cpp
+ *     [11] src/glfw_window.cpp     [EMBER_USE_GLFW]
+ * ============================================================================
+ * QUICK START — in exactly ONE translation unit:
+ *
+ *     #define EMBER_IMPLEMENTATION
+ *     #define EMBER_USE_GLFW            // optional: GLFW window module
+ *     #define EMBER_USE_STB             // optional: PNG sprites
+ *     #include "ember.hpp"
+ *
+ *     int main() {
+ *         ember::Window win(1280, 720, "demo");   // 4.3 core context + gl::init
+ *         ember::ParticleSystem sys({100000, 30000});
+ *         sys.setGravity({0.f, -9.81f, 0.f});
+ *         // main loop: win.pollEvents(); sys.update(dt);
+ *         //            sys.render(view, proj, fbW, fbH, fovYDeg);
+ *     }
+ * ============================================================================
+ * FEATURE MACROS
+ *     EMBER_IMPLEMENTATION  define in ONE TU to compile the implementation
+ *     EMBER_USE_GLFW        include the GLFW window convenience module
+ *     EMBER_USE_STB         PNG sprite support (define STB_IMAGE_IMPLEMENTATION
+ *                           in some TU as well)
+ * ============================================================================
+ * DEPENDENCIES (documented in INTEGRATION docs, §2)
+ *     glad        OpenGL 4.3 core loader — include <glad/gl.h> + compile glad.c
+ *     glm (>=0.9.9) header-only math
+ *     GLFW 3.4    only with EMBER_USE_GLFW
+ *     stb_image.h only with EMBER_USE_STB
+ * ============================================================================
+ * LICENSE — MIT (see the LICENSE file in the repository root).
+ * ==========================================================================*/
+
+/* ============================================================================
+ * SECTION A — DECLARATIONS
+ * ==========================================================================*/
 
 #ifndef EMBER_SINGLE_HEADER_HPP
 #define EMBER_SINGLE_HEADER_HPP
-// ================= [ember/gl.hpp] =================
+
+/* ============================================================================
+ * [ 1] gl.hpp
+ * GL loading + error helpers (glad required)
+ * ========================================================================== */
 
 // GL function loading + error helpers.
 // The core library never creates a GL context — the host application does
@@ -73,8 +108,10 @@ inline int popErrors(const char* where = nullptr) {
 
 } // namespace gl
 } // namespace ember
-
-// ================= [ember/core.hpp] =================
+/* ============================================================================
+ * [ 2] core.hpp
+ * Particle, force types, Rng
+ * ========================================================================== */
 
 // Core data types shared between the CPU side and the simulation.
 
@@ -182,15 +219,15 @@ private:
 };
 
 } // namespace ember
-
-// ================= [ember/emitters.hpp] =================
+/* ============================================================================
+ * [ 3] emitters.hpp
+ * Emitter + SpawnRequest (GPU spawn requests)
+ * ========================================================================== */
 
 // CPU-side emitters: they generate spawn data for the GPU simulation.
 
-
 #include <algorithm>
 #include <cmath>
-#include <cstdint>
 #include <vector>
 
 namespace ember {
@@ -394,11 +431,12 @@ private:
 };
 
 } // namespace ember
-
-// ================= [ember/gpu.hpp] =================
+/* ============================================================================
+ * [ 4] gpu.hpp
+ * Buffer / Texture / VertexArray RAII wrappers
+ * ========================================================================== */
 
 // RAII wrappers for GL buffer objects and vertex arrays.
-
 
 namespace ember {
 
@@ -536,19 +574,17 @@ private:
 };
 
 } // namespace ember
-
-// ================= [ember/shader.hpp] =================
+/* ============================================================================
+ * [ 5] shader.hpp
+ * Shader — uniform-cached GL program
+ * ========================================================================== */
 
 // RAII GL program with cached uniform lookup.
-
-
-#include <glm/glm.hpp>
 
 #include <initializer_list>
 #include <string>
 #include <unordered_map>
 #include <utility>
-#include <vector>
 
 namespace ember {
 
@@ -594,8 +630,10 @@ private:
 };
 
 } // namespace ember
-
-// ================= [ember/config.hpp] =================
+/* ============================================================================
+ * [ 6] config.hpp
+ * INI-style Config parser (loadConfig/apply)
+ * ========================================================================== */
 
 // INI-style configuration with a self-contained parser (no third-party JSON).
 //
@@ -611,15 +649,10 @@ private:
 //
 // Errors throw std::runtime_error with a line number.
 
-
-#include <algorithm>
 #include <cctype>
-#include <cstdint>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
-#include <string>
-#include <vector>
 
 namespace ember {
 
@@ -979,14 +1012,12 @@ private:
 };
 
 } // namespace ember
-
-// ================= [ember/particle_system.hpp] =================
+/* ============================================================================
+ * [ 7] particle_system.hpp
+ * ParticleSystem — GPU simulation + rendering
+ * ========================================================================== */
 
 // The particle system: GPU simulation (compute shaders) + instanced rendering.
-
-
-#include <cstdint>
-#include <vector>
 
 namespace ember {
 
@@ -1206,9 +1237,12 @@ private:
 
 } // namespace ember
 
-
 #ifdef EMBER_USE_GLFW
-// ================= [ember/glfw_window.hpp] =================
+
+/* ============================================================================
+ * [ 8] glfw_window.hpp
+ * GLFW convenience window (EMBER_USE_GLFW)
+ * ========================================================================== */
 
 // Minimal GLFW window wrapper (optional convenience module).
 // Creates a 4.3 core-profile context, initializes glad, tracks input state
@@ -1219,8 +1253,6 @@ private:
 #define GLFW_INCLUDE_NONE
 #endif
 #include <GLFW/glfw3.h>
-
-#include <glm/glm.hpp>
 
 #include <functional>
 
@@ -1282,19 +1314,24 @@ private:
 
 } // namespace ember
 
-
 #endif // EMBER_USE_GLFW
 
 #endif // EMBER_SINGLE_HEADER_HPP
 
-// =====================================================================
-// Implementation — compile ONCE by defining EMBER_IMPLEMENTATION in a
-// single translation unit (e.g. right before this include).
-// =====================================================================
+/* ============================================================================
+ * SECTION B — IMPLEMENTATION
+ * Compile ONCE: define EMBER_IMPLEMENTATION before including this header
+ * (one TU in the whole project). Without it this section is skipped.
+ * ==========================================================================*/
+
 #ifdef EMBER_IMPLEMENTATION
 #ifndef EMBER_SINGLE_HEADER_IMPLEMENTATION
 #define EMBER_SINGLE_HEADER_IMPLEMENTATION
-// ================= [src/shader.cpp] =================
+
+/* ============================================================================
+ * [ 9] shader.cpp
+ * Shader implementation
+ * ========================================================================== */
 
 #include <glm/gtc/type_ptr.hpp>
 
@@ -1416,8 +1453,11 @@ void Shader::setVec4(const char* n, const glm::vec4& v) { glUniform4fv(location(
 void Shader::setMat4(const char* n, const glm::mat4& v) { glUniformMatrix4fv(location(n), 1, GL_FALSE, glm::value_ptr(v)); }
 
 } // namespace ember
+/* ============================================================================
+ * [10] particle_system.cpp
+ * ParticleSystem + embedded shader sources
+ * ========================================================================== */
 
-// ================= [src/particle_system.cpp] =================
 #ifdef EMBER_USE_STB
 #include "stb_image.h"
 #endif // EMBER_USE_STB
@@ -1433,17 +1473,11 @@ void Shader::setMat4(const char* n, const glm::mat4& v) { glUniformMatrix4fv(loc
 //      (CAS pop) or appended at the end (with capacity guard).
 //   4. Read back the alive counter, swap cur/next, render instanced quads.
 
-
-
-
-#include <glm/gtc/type_ptr.hpp>
-
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <stdexcept>
 #include <vector>
 
 namespace ember {
@@ -2952,12 +2986,12 @@ void ParticleSystem::ensurePrograms() {
 
 } // namespace ember
 
-
 #ifdef EMBER_USE_GLFW
-// ================= [src/glfw_window.cpp] =================
 
-
-#include <stdexcept>
+/* ============================================================================
+ * [11] glfw_window.cpp
+ * GLFW window wrapper (EMBER_USE_GLFW)
+ * ========================================================================== */
 
 namespace ember {
 
@@ -3060,7 +3094,6 @@ void Window::resizeCb(GLFWwindow* w, int width, int height) {
 }
 
 } // namespace ember
-
 
 #endif // EMBER_USE_GLFW
 
