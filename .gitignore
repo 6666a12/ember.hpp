@@ -1,6 +1,7 @@
 build/
 build-noeditor/
 out/
+docs/
 .cache/
 *.o
 *.obj
