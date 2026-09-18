@@ -36,7 +36,8 @@
 namespace ember_example {
 
 // Unproject the cursor onto the horizontal plane y = py.
-inline glm::vec3 rayPlanePoint(const ember::OrbitCamera& cam, glm::vec2 ndc, float aspect, float py) {
+inline bool rayPlanePoint(const ember::OrbitCamera& cam, glm::vec2 ndc, float aspect, float py, glm::vec3& hit) {
+    if (!std::isfinite(aspect) || aspect <= 0.f) return false;
     const glm::mat4 invVP = glm::inverse(cam.projection(aspect) * cam.view());
     const glm::vec4 n = invVP * glm::vec4(ndc, -1.f, 1.f);
     const glm::vec4 f = invVP * glm::vec4(ndc, 1.f, 1.f);
@@ -44,8 +45,13 @@ inline glm::vec3 rayPlanePoint(const ember::OrbitCamera& cam, glm::vec2 ndc, flo
     const glm::vec3 pf = glm::vec3(f) / f.w;
     const glm::vec3 o = cam.position();
     const glm::vec3 dir = glm::normalize(pf - pn);
-    const float t = std::abs(dir.y) > 1e-4f ? (py - o.y) / dir.y : 0.f;
-    return o + dir * t;
+    if (std::abs(dir.y) <= 1e-4f) return false;
+    const float t = (py - o.y) / dir.y;
+    if (!std::isfinite(t) || t < 0.f) return false;
+    const glm::vec3 point = o + dir * t;
+    if (!std::isfinite(point.x) || !std::isfinite(point.y) || !std::isfinite(point.z)) return false;
+    hit = point;
+    return true;
 }
 
 #ifdef EMBER_EDITOR_ENABLED
@@ -91,14 +97,15 @@ struct EmitterEditor {
         }
 
         // right-click: place on the plane at the emitter's current height
-        if (win.mouseButton(GLFW_MOUSE_BUTTON_RIGHT) && !wasRight_) {
+        if (win.mouseButton(GLFW_MOUSE_BUTTON_RIGHT)) {
             const glm::ivec2 vp = win.framebufferSize();
-            if (vp.x > 0 && vp.y > 0) {
+            const auto size = win.size();
+            if (vp.x > 0 && vp.y > 0 && size.x > 0 && size.y > 0) {
                 const glm::vec2 cur = win.cursor();
                 const float aspect = (float)vp.x / (float)vp.y;
-                const glm::vec2 ndc(cur.x / (float)vp.x * 2.f - 1.f, 1.f - cur.y / (float)vp.y * 2.f);
-                e->position = rayPlanePoint(cam, ndc, aspect, e->position.y);
-                std::printf("[editor] emitter %d placed at (%.2f, %.2f, %.2f)\n",
+                const glm::vec2 ndc(cur.x / (float)size.x * 2.f - 1.f, 1.f - cur.y / (float)size.y * 2.f);
+                const bool placed = rayPlanePoint(cam, ndc, aspect, e->position.y, e->position);
+                if (placed && !wasRight_) std::printf("[editor] emitter %d placed at (%.2f, %.2f, %.2f)\n",
                             selected, e->position.x, e->position.y, e->position.z);
             }
         }
@@ -110,9 +117,9 @@ struct EmitterEditor {
         if (win.key(GLFW_KEY_COMMA)) e->coneAngle = std::max(0.f, e->coneAngle - 45.f * dt);
         if (win.key(GLFW_KEY_PERIOD)) e->coneAngle = std::min(120.f, e->coneAngle + 45.f * dt);
         if (win.key(GLFW_KEY_MINUS)) e->rate = std::max(0.f, e->rate * (1.f - 2.f * dt));
-        if (win.key(GLFW_KEY_EQUAL)) e->rate *= (1.f + 2.f * dt);
-        if (win.key(GLFW_KEY_SEMICOLON)) e->setSizeRange(e->sizeMin * 0.995f, e->sizeMax * 0.995f);
-        if (win.key(GLFW_KEY_APOSTROPHE)) e->setSizeRange(e->sizeMin * 1.005f, e->sizeMax * 1.005f);
+        if (win.key(GLFW_KEY_EQUAL)) e->rate = std::max(e->rate, 1.f) * std::exp(2.f * dt);
+        if (win.key(GLFW_KEY_SEMICOLON)) e->setSizeRange(e->sizeMin * std::exp(-0.3f * dt), e->sizeMax * std::exp(-0.3f * dt));
+        if (win.key(GLFW_KEY_APOSTROPHE)) e->setSizeRange(e->sizeMin * std::exp(0.3f * dt), e->sizeMax * std::exp(0.3f * dt));
 
         // P: print config lines (paste straight into the .ini)
         if (win.key(GLFW_KEY_P) && !wasP_) {
@@ -124,6 +131,7 @@ struct EmitterEditor {
             std::printf("shape          = %s\n", shape);
             std::printf("position       = %.3f, %.3f, %.3f\n", e->position.x, e->position.y, e->position.z);
             std::printf("axis           = %.3f, %.3f, %.3f\n", e->axis.x, e->axis.y, e->axis.z);
+            std::printf("extents        = %.3f, %.3f, %.3f\n", e->extents.x, e->extents.y, e->extents.z);
             std::printf("radius         = %.3f\n", e->radius);
             std::printf("rate           = %.0f\n", e->rate);
             std::printf("base_velocity  = %.3f, %.3f, %.3f\n",

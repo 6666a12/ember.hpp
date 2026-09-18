@@ -1,0 +1,3050 @@
+{
+  "order": [
+    "old",
+    "new",
+    "new",
+    "old"
+  ],
+  "runs": [
+    {
+      "version": "old",
+      "command": [
+        "D:\\Workspace\\Particles\\build\\perf-before\\ember_benchmark_plain.exe",
+        "--shader-dir",
+        "D:\\Workspace\\Particles\\build\\perf-before",
+        "--output",
+        "D:\\Workspace\\Particles\\benchmarks\\baselines\\2026-09-17-rtx4060-optimized\\small-load-abba-validated\\0-old.partial.json",
+        "--gpu-timers",
+        "off",
+        "--counts",
+        "10000,100000",
+        "--scenarios",
+        "dense,sparse,sparse_control,refraction_depth,bloom",
+        "--frames",
+        "480",
+        "--warmup",
+        "120",
+        "--repeats",
+        "3"
+      ],
+      "telemetry_before": {
+        "command": [
+          "nvidia-smi",
+          "--query-gpu=name,driver_version,pstate,temperature.gpu,power.draw,power.limit,clocks.gr,clocks.mem,utilization.gpu",
+          "--format=csv"
+        ],
+        "returncode": 0,
+        "output": "name, driver_version, pstate, temperature.gpu, power.draw [W], power.limit [W], clocks.current.graphics [MHz], clocks.current.memory [MHz], utilization.gpu [%]\nNVIDIA GeForce RTX 4060 Laptop GPU, 595.71, P8, 58, 5.36 W, [N/A], 270 MHz, 405 MHz, 38 %"
+      },
+      "telemetry_after": {
+        "command": [
+          "nvidia-smi",
+          "--query-gpu=name,driver_version,pstate,temperature.gpu,power.draw,power.limit,clocks.gr,clocks.mem,utilization.gpu",
+          "--format=csv"
+        ],
+        "returncode": 0,
+        "output": "name, driver_version, pstate, temperature.gpu, power.draw [W], power.limit [W], clocks.current.graphics [MHz], clocks.current.memory [MHz], utilization.gpu [%]\nNVIDIA GeForce RTX 4060 Laptop GPU, 595.71, P0, 67, 43.72 W, [N/A], 2625 MHz, 8001 MHz, 74 %"
+      },
+      "binary_sha256": "4c42b6f91c6826bf4535573afb055ae35fa846182d92b36913acbe18257968fa",
+      "shaders": {
+        "bloom.vert": "ed504dd3fa7fc6690b7890a5e8649af706e4d550f9147375d3aa5a023e24f9b9",
+        "bloom_blur.frag": "ea5dd61a58584401b2db2f329a39219689fe598ef57ee1a3298194bc0c216e99",
+        "bloom_composite.frag": "8d460f0a1ce844f142acab845725a6c0d772118b62daba48c1740a758ff2fd5f",
+        "bloom_threshold.frag": "b2be76c31435a3cae450cd0356900cf162381c2e502b3c5c836a344bf87cf6a1",
+        "particle.frag": "57c15baeee5751209730c1f8c450f4e1bd644ed53b2eaf6cab309a888713284d",
+        "particle.vert": "73234cfa3a8ff9649cd025f76f8bf0e6d4ed6fdd3c1094c6d3d9d4877bf521c6",
+        "simulate.comp": "dcfc86f0777b661705ad2e8504646b6dff1b4fff318bb650765469fc7721f05d",
+        "sort.comp": "db333517f3d58ab8a6847643df0bfab028c35e6485b88babfbd63d2fd7742c40"
+      },
+      "raw_sha256": "ad5c9d6c38e823dc5311e44612fbffc558e13c8d84ef8b7c7d37f61e29084676",
+      "summary": {
+        "environment": {
+          "schema_version": 1,
+          "workload_version": 1,
+          "backend": "opengl",
+          "variant": "plain",
+          "compiler": "GNU 16.1.0",
+          "build_type": "Release",
+          "system": "Windows AMD64",
+          "gl_vendor": "NVIDIA Corporation",
+          "gl_renderer": "NVIDIA GeForce RTX 4060 Laptop GPU/PCIe/SSE2",
+          "gl_version": "4.3.0 NVIDIA 595.71",
+          "timestamp_bits": 64,
+          "gpu_timers": false,
+          "width": 1280,
+          "height": 720,
+          "seed": 20260917,
+          "dt_seconds": 0.0166666675,
+          "warmup_frames": 120,
+          "measured_frames": 480,
+          "repeats": 3,
+          "samples": 1,
+          "target_format": "RGBA16F+D24",
+          "presentation": "offscreen_no_swap"
+        },
+        "cases": [
+          {
+            "scenario": "bloom",
+            "capacity": 10000,
+            "alive": {
+              "count": 1440,
+              "min": 10000,
+              "mean": 10000.0,
+              "p50": 10000,
+              "p95": 10000,
+              "p99": 10000,
+              "max": 10000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.12,
+                "mean": 0.2156190972222222,
+                "p50": 0.1897,
+                "p95": 0.3345,
+                "p99": 0.5442,
+                "max": 2.1289
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0102,
+                "mean": 0.020105416666666667,
+                "p50": 0.0126,
+                "p95": 0.0479,
+                "p99": 0.0797,
+                "max": 0.144
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.1063,
+                "mean": 0.1954053472222222,
+                "p50": 0.1736,
+                "p95": 0.3036,
+                "p99": 0.5037,
+                "max": 2.1131
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.221525625,
+                "cpu_frame_p50_ms": 0.1942
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.21420354166666666,
+                "cpu_frame_p50_ms": 0.1861
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.21664458333333333,
+                "cpu_frame_p50_ms": 0.1905
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.21420354166666666,
+              "mean": 0.21745791666666667,
+              "p50": 0.21664458333333333,
+              "p95": 0.221525625,
+              "p99": 0.221525625,
+              "max": 0.221525625
+            }
+          },
+          {
+            "scenario": "bloom",
+            "capacity": 100000,
+            "alive": {
+              "count": 1440,
+              "min": 100000,
+              "mean": 100000.0,
+              "p50": 100000,
+              "p95": 100000,
+              "p99": 100000,
+              "max": 100000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.1703,
+                "mean": 0.4370070138888889,
+                "p50": 0.4051,
+                "p95": 0.5993,
+                "p99": 0.7623,
+                "max": 2.3127
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0102,
+                "mean": 0.023015902777777777,
+                "p50": 0.015,
+                "p95": 0.0589,
+                "p99": 0.0881,
+                "max": 0.1974
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.1397,
+                "mean": 0.41387409722222224,
+                "p50": 0.3842,
+                "p95": 0.5658,
+                "p99": 0.7274,
+                "max": 2.301
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.434148125,
+                "cpu_frame_p50_ms": 0.4023
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.441591875,
+                "cpu_frame_p50_ms": 0.4067
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.44293479166666666,
+                "cpu_frame_p50_ms": 0.4073
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.434148125,
+              "mean": 0.43955826388888886,
+              "p50": 0.441591875,
+              "p95": 0.44293479166666666,
+              "p99": 0.44293479166666666,
+              "max": 0.44293479166666666
+            }
+          },
+          {
+            "scenario": "dense",
+            "capacity": 10000,
+            "alive": {
+              "count": 1440,
+              "min": 10000,
+              "mean": 10000.0,
+              "p50": 10000,
+              "p95": 10000,
+              "p99": 10000,
+              "max": 10000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0533,
+                "mean": 0.07236833333333334,
+                "p50": 0.0567,
+                "p95": 0.1004,
+                "p99": 0.3687,
+                "max": 1.9716
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0031,
+                "mean": 0.004501875000000001,
+                "p50": 0.0038,
+                "p95": 0.0073,
+                "p99": 0.0255,
+                "max": 0.0792
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0497,
+                "mean": 0.06778013888888888,
+                "p50": 0.0529,
+                "p95": 0.086,
+                "p99": 0.3643,
+                "max": 1.9673
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.07868854166666667,
+                "cpu_frame_p50_ms": 0.0681
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.07259166666666667,
+                "cpu_frame_p50_ms": 0.0562
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.06772854166666667,
+                "cpu_frame_p50_ms": 0.0562
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.06772854166666667,
+              "mean": 0.07300291666666667,
+              "p50": 0.07259166666666667,
+              "p95": 0.07868854166666667,
+              "p99": 0.07868854166666667,
+              "max": 0.07868854166666667
+            }
+          },
+          {
+            "scenario": "dense",
+            "capacity": 100000,
+            "alive": {
+              "count": 1440,
+              "min": 100000,
+              "mean": 100000.0,
+              "p50": 100000,
+              "p95": 100000,
+              "p99": 100000,
+              "max": 100000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0942,
+                "mean": 0.187371875,
+                "p50": 0.1702,
+                "p95": 0.2491,
+                "p99": 0.5027,
+                "max": 1.9824
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0033,
+                "mean": 0.005344930555555556,
+                "p50": 0.0039,
+                "p95": 0.0167,
+                "p99": 0.0368,
+                "max": 0.0853
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0877,
+                "mean": 0.18193708333333333,
+                "p50": 0.1663,
+                "p95": 0.2209,
+                "p99": 0.4897,
+                "max": 1.9545
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.187658125,
+                "cpu_frame_p50_ms": 0.1694
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.188780625,
+                "cpu_frame_p50_ms": 0.1705
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.18814375,
+                "cpu_frame_p50_ms": 0.1707
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.187658125,
+              "mean": 0.18819416666666666,
+              "p50": 0.18814375,
+              "p95": 0.188780625,
+              "p99": 0.188780625,
+              "max": 0.188780625
+            }
+          },
+          {
+            "scenario": "refraction_depth",
+            "capacity": 10000,
+            "alive": {
+              "count": 1440,
+              "min": 10000,
+              "mean": 10000.0,
+              "p50": 10000,
+              "p95": 10000,
+              "p99": 10000,
+              "max": 10000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0629,
+                "mean": 0.08340125000000001,
+                "p50": 0.0709,
+                "p95": 0.1005,
+                "p99": 0.3032,
+                "max": 2.2084
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0037,
+                "mean": 0.004660972222222223,
+                "p50": 0.0042,
+                "p95": 0.0053,
+                "p99": 0.0213,
+                "max": 0.0481
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.059,
+                "mean": 0.07865354166666666,
+                "p50": 0.0665,
+                "p95": 0.0902,
+                "p99": 0.2991,
+                "max": 2.2043
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.09170729166666666,
+                "cpu_frame_p50_ms": 0.0796
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.08057625,
+                "cpu_frame_p50_ms": 0.0694
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.07968833333333333,
+                "cpu_frame_p50_ms": 0.0694
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.07968833333333333,
+              "mean": 0.083990625,
+              "p50": 0.08057625,
+              "p95": 0.09170729166666666,
+              "p99": 0.09170729166666666,
+              "max": 0.09170729166666666
+            }
+          },
+          {
+            "scenario": "refraction_depth",
+            "capacity": 100000,
+            "alive": {
+              "count": 1440,
+              "min": 100000,
+              "mean": 100000.0,
+              "p50": 100000,
+              "p95": 100000,
+              "p99": 100000,
+              "max": 100000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0963,
+                "mean": 0.24637298611111114,
+                "p50": 0.2241,
+                "p95": 0.364,
+                "p99": 0.6068,
+                "max": 2.1154
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0036,
+                "mean": 0.006247222222222223,
+                "p50": 0.0044,
+                "p95": 0.0211,
+                "p99": 0.0387,
+                "max": 0.0822
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0882,
+                "mean": 0.24003555555555556,
+                "p50": 0.2198,
+                "p95": 0.3569,
+                "p99": 0.5984,
+                "max": 2.111
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.24345458333333334,
+                "cpu_frame_p50_ms": 0.2236
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.25189812500000003,
+                "cpu_frame_p50_ms": 0.2248
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.24716333333333335,
+                "cpu_frame_p50_ms": 0.2241
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.24345458333333334,
+              "mean": 0.24750534722222226,
+              "p50": 0.24716333333333335,
+              "p95": 0.25189812500000003,
+              "p99": 0.25189812500000003,
+              "max": 0.25189812500000003
+            }
+          },
+          {
+            "scenario": "sparse",
+            "capacity": 10000,
+            "alive": {
+              "count": 1440,
+              "min": 100,
+              "mean": 100.0,
+              "p50": 100,
+              "p95": 100,
+              "p99": 100,
+              "max": 100
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0403,
+                "mean": 0.05619180555555556,
+                "p50": 0.0436,
+                "p95": 0.0794,
+                "p99": 0.2712,
+                "max": 1.9897
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.003,
+                "mean": 0.0041556944444444445,
+                "p50": 0.0037,
+                "p95": 0.0045,
+                "p99": 0.0176,
+                "max": 0.0592
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0367,
+                "mean": 0.05195076388888889,
+                "p50": 0.0397,
+                "p95": 0.0738,
+                "p99": 0.2677,
+                "max": 1.9853
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.06773916666666667,
+                "cpu_frame_p50_ms": 0.0506
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.051437083333333335,
+                "cpu_frame_p50_ms": 0.042
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.055395,
+                "cpu_frame_p50_ms": 0.0426
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.051437083333333335,
+              "mean": 0.05819041666666667,
+              "p50": 0.055395,
+              "p95": 0.06773916666666667,
+              "p99": 0.06773916666666667,
+              "max": 0.06773916666666667
+            }
+          },
+          {
+            "scenario": "sparse",
+            "capacity": 100000,
+            "alive": {
+              "count": 1440,
+              "min": 1000,
+              "mean": 1000.0,
+              "p50": 1000,
+              "p95": 1000,
+              "p99": 1000,
+              "max": 1000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0634,
+                "mean": 0.07477659722222221,
+                "p50": 0.0655,
+                "p95": 0.0871,
+                "p99": 0.332,
+                "max": 1.9515
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.003,
+                "mean": 0.003986388888888889,
+                "p50": 0.0035,
+                "p95": 0.0044,
+                "p99": 0.0189,
+                "max": 0.0402
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0595,
+                "mean": 0.0707032638888889,
+                "p50": 0.0618,
+                "p95": 0.082,
+                "p99": 0.3279,
+                "max": 1.9478
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.07722208333333333,
+                "cpu_frame_p50_ms": 0.0655
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.07660166666666667,
+                "cpu_frame_p50_ms": 0.0656
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.07198020833333334,
+                "cpu_frame_p50_ms": 0.0655
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.07198020833333334,
+              "mean": 0.07526798611111112,
+              "p50": 0.07660166666666667,
+              "p95": 0.07722208333333333,
+              "p99": 0.07722208333333333,
+              "max": 0.07722208333333333
+            }
+          },
+          {
+            "scenario": "sparse_control",
+            "capacity": 10000,
+            "alive": {
+              "count": 1440,
+              "min": 100,
+              "mean": 100.0,
+              "p50": 100,
+              "p95": 100,
+              "p99": 100,
+              "max": 100
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0395,
+                "mean": 0.054562569444444445,
+                "p50": 0.0423,
+                "p95": 0.0704,
+                "p99": 0.2708,
+                "max": 2.3075
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0031,
+                "mean": 0.003954027777777778,
+                "p50": 0.0038,
+                "p95": 0.0045,
+                "p99": 0.0127,
+                "max": 0.0322
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0357,
+                "mean": 0.05052020833333333,
+                "p50": 0.0384,
+                "p95": 0.0663,
+                "p99": 0.2428,
+                "max": 2.3021
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.06289833333333333,
+                "cpu_frame_p50_ms": 0.0498
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.049128958333333334,
+                "cpu_frame_p50_ms": 0.0414
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.05309833333333334,
+                "cpu_frame_p50_ms": 0.0416
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.049128958333333334,
+              "mean": 0.055041875,
+              "p50": 0.05309833333333334,
+              "p95": 0.06289833333333333,
+              "p99": 0.06289833333333333,
+              "max": 0.06289833333333333
+            }
+          },
+          {
+            "scenario": "sparse_control",
+            "capacity": 100000,
+            "alive": {
+              "count": 1440,
+              "min": 1000,
+              "mean": 1000.0,
+              "p50": 1000,
+              "p95": 1000,
+              "p99": 1000,
+              "max": 1000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0408,
+                "mean": 0.05218576388888888,
+                "p50": 0.043,
+                "p95": 0.063,
+                "p99": 0.1999,
+                "max": 1.9483
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.003,
+                "mean": 0.003972638888888889,
+                "p50": 0.0036,
+                "p95": 0.0044,
+                "p99": 0.0164,
+                "max": 0.0425
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0374,
+                "mean": 0.04812416666666667,
+                "p50": 0.0393,
+                "p95": 0.0577,
+                "p99": 0.1957,
+                "max": 1.9441
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.050688333333333335,
+                "cpu_frame_p50_ms": 0.043
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.053024375,
+                "cpu_frame_p50_ms": 0.0431
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.054454583333333334,
+                "cpu_frame_p50_ms": 0.043
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.050688333333333335,
+              "mean": 0.052722430555555554,
+              "p50": 0.053024375,
+              "p95": 0.054454583333333334,
+              "p99": 0.054454583333333334,
+              "max": 0.054454583333333334
+            }
+          }
+        ]
+      }
+    },
+    {
+      "version": "new",
+      "command": [
+        "D:\\Workspace\\Particles\\build\\ember_benchmark_plain.exe",
+        "--shader-dir",
+        "D:\\Workspace\\Particles\\shaders",
+        "--output",
+        "D:\\Workspace\\Particles\\benchmarks\\baselines\\2026-09-17-rtx4060-optimized\\small-load-abba-validated\\1-new.partial.json",
+        "--gpu-timers",
+        "off",
+        "--counts",
+        "10000,100000",
+        "--scenarios",
+        "dense,sparse,sparse_control,refraction_depth,bloom",
+        "--frames",
+        "480",
+        "--warmup",
+        "120",
+        "--repeats",
+        "3"
+      ],
+      "telemetry_before": {
+        "command": [
+          "nvidia-smi",
+          "--query-gpu=name,driver_version,pstate,temperature.gpu,power.draw,power.limit,clocks.gr,clocks.mem,utilization.gpu",
+          "--format=csv"
+        ],
+        "returncode": 0,
+        "output": "name, driver_version, pstate, temperature.gpu, power.draw [W], power.limit [W], clocks.current.graphics [MHz], clocks.current.memory [MHz], utilization.gpu [%]\nNVIDIA GeForce RTX 4060 Laptop GPU, 595.71, P0, 67, 43.72 W, [N/A], 2625 MHz, 8001 MHz, 74 %"
+      },
+      "telemetry_after": {
+        "command": [
+          "nvidia-smi",
+          "--query-gpu=name,driver_version,pstate,temperature.gpu,power.draw,power.limit,clocks.gr,clocks.mem,utilization.gpu",
+          "--format=csv"
+        ],
+        "returncode": 0,
+        "output": "name, driver_version, pstate, temperature.gpu, power.draw [W], power.limit [W], clocks.current.graphics [MHz], clocks.current.memory [MHz], utilization.gpu [%]\nNVIDIA GeForce RTX 4060 Laptop GPU, 595.71, P0, 69, 44.40 W, [N/A], 2625 MHz, 8001 MHz, 69 %"
+      },
+      "binary_sha256": "6dfcdd74c1f498d9acde33d200903009b412ed6149a536dd144d6c5e6fd0a8c3",
+      "shaders": {
+        "bloom.vert": "ed504dd3fa7fc6690b7890a5e8649af706e4d550f9147375d3aa5a023e24f9b9",
+        "bloom_blur.frag": "ea5dd61a58584401b2db2f329a39219689fe598ef57ee1a3298194bc0c216e99",
+        "bloom_composite.frag": "8d460f0a1ce844f142acab845725a6c0d772118b62daba48c1740a758ff2fd5f",
+        "bloom_threshold.frag": "b2be76c31435a3cae450cd0356900cf162381c2e502b3c5c836a344bf87cf6a1",
+        "particle.frag": "57c15baeee5751209730c1f8c450f4e1bd644ed53b2eaf6cab309a888713284d",
+        "particle.vert": "73234cfa3a8ff9649cd025f76f8bf0e6d4ed6fdd3c1094c6d3d9d4877bf521c6",
+        "simulate.comp": "73c6be02b50cc083091701c954bb67f4bd5636852c1a847f83cdf40508cec428",
+        "sort.comp": "3af8ddd5c014f93f92fa5478901186e321540a163e55cea164fb82a0811eafc0"
+      },
+      "raw_sha256": "8c84ef65d2906732d57cf4fd78be9b258424e340a408522ce01c93786301278f",
+      "summary": {
+        "environment": {
+          "schema_version": 1,
+          "workload_version": 1,
+          "backend": "opengl",
+          "variant": "plain",
+          "compiler": "GNU 16.1.0",
+          "build_type": "Release",
+          "system": "Windows AMD64",
+          "gl_vendor": "NVIDIA Corporation",
+          "gl_renderer": "NVIDIA GeForce RTX 4060 Laptop GPU/PCIe/SSE2",
+          "gl_version": "4.3.0 NVIDIA 595.71",
+          "timestamp_bits": 64,
+          "gpu_timers": false,
+          "width": 1280,
+          "height": 720,
+          "seed": 20260917,
+          "dt_seconds": 0.0166666675,
+          "warmup_frames": 120,
+          "measured_frames": 480,
+          "repeats": 3,
+          "samples": 1,
+          "target_format": "RGBA16F+D24",
+          "presentation": "offscreen_no_swap"
+        },
+        "cases": [
+          {
+            "scenario": "bloom",
+            "capacity": 10000,
+            "alive": {
+              "count": 1440,
+              "min": 10000,
+              "mean": 10000.0,
+              "p50": 10000,
+              "p95": 10000,
+              "p99": 10000,
+              "max": 10000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.1229,
+                "mean": 0.21989541666666668,
+                "p50": 0.1962,
+                "p95": 0.3402,
+                "p99": 0.5148,
+                "max": 2.3107
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0104,
+                "mean": 0.023109930555555557,
+                "p50": 0.0175,
+                "p95": 0.0514,
+                "p99": 0.08,
+                "max": 0.1373
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0821,
+                "mean": 0.19666055555555553,
+                "p50": 0.1755,
+                "p95": 0.2963,
+                "p99": 0.4857,
+                "max": 2.2807
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.22965854166666666,
+                "cpu_frame_p50_ms": 0.2014
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.21321625,
+                "cpu_frame_p50_ms": 0.1914
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.22354333333333332,
+                "cpu_frame_p50_ms": 0.198
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.21321625,
+              "mean": 0.222139375,
+              "p50": 0.22354333333333332,
+              "p95": 0.22965854166666666,
+              "p99": 0.22965854166666666,
+              "max": 0.22965854166666666
+            }
+          },
+          {
+            "scenario": "bloom",
+            "capacity": 100000,
+            "alive": {
+              "count": 1440,
+              "min": 100000,
+              "mean": 100000.0,
+              "p50": 100000,
+              "p95": 100000,
+              "p99": 100000,
+              "max": 100000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.1786,
+                "mean": 0.4405865972222222,
+                "p50": 0.4086,
+                "p95": 0.6127,
+                "p99": 0.7956,
+                "max": 2.1402
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0103,
+                "mean": 0.026458472222222224,
+                "p50": 0.0182,
+                "p95": 0.0638,
+                "p99": 0.0944,
+                "max": 0.3512
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.1276,
+                "mean": 0.4139977083333333,
+                "p50": 0.3812,
+                "p95": 0.5599,
+                "p99": 0.7564,
+                "max": 2.1286
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.44333395833333333,
+                "cpu_frame_p50_ms": 0.4076
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.43862541666666666,
+                "cpu_frame_p50_ms": 0.4063
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.448343125,
+                "cpu_frame_p50_ms": 0.4132
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.43862541666666666,
+              "mean": 0.44343416666666663,
+              "p50": 0.44333395833333333,
+              "p95": 0.448343125,
+              "p99": 0.448343125,
+              "max": 0.448343125
+            }
+          },
+          {
+            "scenario": "dense",
+            "capacity": 10000,
+            "alive": {
+              "count": 1440,
+              "min": 10000,
+              "mean": 10000.0,
+              "p50": 10000,
+              "p95": 10000,
+              "p99": 10000,
+              "max": 10000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0467,
+                "mean": 0.06455881944444444,
+                "p50": 0.0554,
+                "p95": 0.0705,
+                "p99": 0.222,
+                "max": 2.0968
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0033,
+                "mean": 0.004151458333333333,
+                "p50": 0.0039,
+                "p95": 0.0051,
+                "p99": 0.0131,
+                "max": 0.0857
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0432,
+                "mean": 0.06031923611111111,
+                "p50": 0.0516,
+                "p95": 0.0658,
+                "p99": 0.2177,
+                "max": 2.0924
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.06689583333333333,
+                "cpu_frame_p50_ms": 0.0555
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.06384083333333333,
+                "cpu_frame_p50_ms": 0.0553
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.06455041666666667,
+                "cpu_frame_p50_ms": 0.0555
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.06384083333333333,
+              "mean": 0.06509569444444445,
+              "p50": 0.06455041666666667,
+              "p95": 0.06689583333333333,
+              "p99": 0.06689583333333333,
+              "max": 0.06689583333333333
+            }
+          },
+          {
+            "scenario": "dense",
+            "capacity": 100000,
+            "alive": {
+              "count": 1440,
+              "min": 100000,
+              "mean": 100000.0,
+              "p50": 100000,
+              "p95": 100000,
+              "p99": 100000,
+              "max": 100000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.1141,
+                "mean": 0.1818882638888889,
+                "p50": 0.1661,
+                "p95": 0.2168,
+                "p99": 0.4896,
+                "max": 2.2316
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0033,
+                "mean": 0.0052025,
+                "p50": 0.0041,
+                "p95": 0.0079,
+                "p99": 0.0367,
+                "max": 0.0869
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.1066,
+                "mean": 0.17659680555555554,
+                "p50": 0.1621,
+                "p95": 0.1896,
+                "p99": 0.4854,
+                "max": 2.2097
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.18086666666666668,
+                "cpu_frame_p50_ms": 0.1658
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.18297645833333334,
+                "cpu_frame_p50_ms": 0.1663
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.18439833333333333,
+                "cpu_frame_p50_ms": 0.1663
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.18086666666666668,
+              "mean": 0.18274715277777778,
+              "p50": 0.18297645833333334,
+              "p95": 0.18439833333333333,
+              "p99": 0.18439833333333333,
+              "max": 0.18439833333333333
+            }
+          },
+          {
+            "scenario": "refraction_depth",
+            "capacity": 10000,
+            "alive": {
+              "count": 1440,
+              "min": 10000,
+              "mean": 10000.0,
+              "p50": 10000,
+              "p95": 10000,
+              "p99": 10000,
+              "max": 10000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0629,
+                "mean": 0.0779575,
+                "p50": 0.0678,
+                "p95": 0.1068,
+                "p99": 0.2437,
+                "max": 2.0521
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0038,
+                "mean": 0.005570069444444444,
+                "p50": 0.0044,
+                "p95": 0.0084,
+                "p99": 0.0405,
+                "max": 0.1383
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0587,
+                "mean": 0.07229097222222222,
+                "p50": 0.0633,
+                "p95": 0.089,
+                "p99": 0.2252,
+                "max": 2.0127
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.075466875,
+                "cpu_frame_p50_ms": 0.0676
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.07727624999999999,
+                "cpu_frame_p50_ms": 0.066
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.08340041666666667,
+                "cpu_frame_p50_ms": 0.0692
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.075466875,
+              "mean": 0.07871451388888889,
+              "p50": 0.07727624999999999,
+              "p95": 0.08340041666666667,
+              "p99": 0.08340041666666667,
+              "max": 0.08340041666666667
+            }
+          },
+          {
+            "scenario": "refraction_depth",
+            "capacity": 100000,
+            "alive": {
+              "count": 1440,
+              "min": 100000,
+              "mean": 100000.0,
+              "p50": 100000,
+              "p95": 100000,
+              "p99": 100000,
+              "max": 100000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.1259,
+                "mean": 0.24745402777777778,
+                "p50": 0.2206,
+                "p95": 0.3703,
+                "p99": 0.5929,
+                "max": 2.0312
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0037,
+                "mean": 0.008237083333333332,
+                "p50": 0.0046,
+                "p95": 0.0291,
+                "p99": 0.0454,
+                "max": 0.1273
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.1106,
+                "mean": 0.23911430555555555,
+                "p50": 0.2161,
+                "p95": 0.3581,
+                "p99": 0.5694,
+                "max": 2.0265
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.25310416666666663,
+                "cpu_frame_p50_ms": 0.2212
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.24764666666666668,
+                "cpu_frame_p50_ms": 0.2205
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.24647291666666668,
+                "cpu_frame_p50_ms": 0.2205
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.24647291666666668,
+              "mean": 0.24907458333333332,
+              "p50": 0.24764666666666668,
+              "p95": 0.25310416666666663,
+              "p99": 0.25310416666666663,
+              "max": 0.25310416666666663
+            }
+          },
+          {
+            "scenario": "sparse",
+            "capacity": 10000,
+            "alive": {
+              "count": 1440,
+              "min": 100,
+              "mean": 100.0,
+              "p50": 100,
+              "p95": 100,
+              "p99": 100,
+              "max": 100
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0393,
+                "mean": 0.04937430555555556,
+                "p50": 0.0415,
+                "p95": 0.054,
+                "p99": 0.1681,
+                "max": 2.1117
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0033,
+                "mean": 0.004111805555555556,
+                "p50": 0.0039,
+                "p95": 0.0047,
+                "p99": 0.013,
+                "max": 0.0703
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0354,
+                "mean": 0.045172986111111105,
+                "p50": 0.0376,
+                "p95": 0.048,
+                "p99": 0.1293,
+                "max": 2.1074
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.049801041666666664,
+                "cpu_frame_p50_ms": 0.0413
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.04949666666666667,
+                "cpu_frame_p50_ms": 0.0416
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.05062333333333333,
+                "cpu_frame_p50_ms": 0.0415
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.04949666666666667,
+              "mean": 0.04997368055555556,
+              "p50": 0.049801041666666664,
+              "p95": 0.05062333333333333,
+              "p99": 0.05062333333333333,
+              "max": 0.05062333333333333
+            }
+          },
+          {
+            "scenario": "sparse",
+            "capacity": 100000,
+            "alive": {
+              "count": 1440,
+              "min": 1000,
+              "mean": 1000.0,
+              "p50": 1000,
+              "p95": 1000,
+              "p99": 1000,
+              "max": 1000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0409,
+                "mean": 0.05259069444444444,
+                "p50": 0.0431,
+                "p95": 0.0679,
+                "p99": 0.2157,
+                "max": 2.0732
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0032,
+                "mean": 0.004475833333333333,
+                "p50": 0.0039,
+                "p95": 0.0072,
+                "p99": 0.02,
+                "max": 0.0794
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0369,
+                "mean": 0.04802763888888889,
+                "p50": 0.0392,
+                "p95": 0.0608,
+                "p99": 0.2068,
+                "max": 2.0688
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.053783541666666664,
+                "cpu_frame_p50_ms": 0.043
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.05522375,
+                "cpu_frame_p50_ms": 0.0433
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.050399791666666666,
+                "cpu_frame_p50_ms": 0.0432
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.050399791666666666,
+              "mean": 0.053135694444444444,
+              "p50": 0.053783541666666664,
+              "p95": 0.05522375,
+              "p99": 0.05522375,
+              "max": 0.05522375
+            }
+          },
+          {
+            "scenario": "sparse_control",
+            "capacity": 10000,
+            "alive": {
+              "count": 1440,
+              "min": 100,
+              "mean": 100.0,
+              "p50": 100,
+              "p95": 100,
+              "p99": 100,
+              "max": 100
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0394,
+                "mean": 0.05101861111111112,
+                "p50": 0.0416,
+                "p95": 0.0635,
+                "p99": 0.1837,
+                "max": 2.3325
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0033,
+                "mean": 0.00419625,
+                "p50": 0.0039,
+                "p95": 0.0057,
+                "p99": 0.0185,
+                "max": 0.0489
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0355,
+                "mean": 0.046732152777777786,
+                "p50": 0.0378,
+                "p95": 0.0574,
+                "p99": 0.1778,
+                "max": 2.3283
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.05089729166666667,
+                "cpu_frame_p50_ms": 0.0415
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.05348791666666666,
+                "cpu_frame_p50_ms": 0.0415
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.05018020833333334,
+                "cpu_frame_p50_ms": 0.0417
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.05018020833333334,
+              "mean": 0.05152180555555556,
+              "p50": 0.05089729166666667,
+              "p95": 0.05348791666666666,
+              "p99": 0.05348791666666666,
+              "max": 0.05348791666666666
+            }
+          },
+          {
+            "scenario": "sparse_control",
+            "capacity": 100000,
+            "alive": {
+              "count": 1440,
+              "min": 1000,
+              "mean": 1000.0,
+              "p50": 1000,
+              "p95": 1000,
+              "p99": 1000,
+              "max": 1000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0412,
+                "mean": 0.051749444444444445,
+                "p50": 0.0432,
+                "p95": 0.0544,
+                "p99": 0.216,
+                "max": 2.14
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0033,
+                "mean": 0.004015208333333333,
+                "p50": 0.0039,
+                "p95": 0.0044,
+                "p99": 0.0113,
+                "max": 0.0664
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0373,
+                "mean": 0.047651180555555554,
+                "p50": 0.0394,
+                "p95": 0.0492,
+                "p99": 0.2119,
+                "max": 2.1357
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.055980625,
+                "cpu_frame_p50_ms": 0.0431
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.05041083333333333,
+                "cpu_frame_p50_ms": 0.0433
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.05026833333333333,
+                "cpu_frame_p50_ms": 0.0432
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.05026833333333333,
+              "mean": 0.05221993055555555,
+              "p50": 0.05041083333333333,
+              "p95": 0.055980625,
+              "p99": 0.055980625,
+              "max": 0.055980625
+            }
+          }
+        ]
+      }
+    },
+    {
+      "version": "new",
+      "command": [
+        "D:\\Workspace\\Particles\\build\\ember_benchmark_plain.exe",
+        "--shader-dir",
+        "D:\\Workspace\\Particles\\shaders",
+        "--output",
+        "D:\\Workspace\\Particles\\benchmarks\\baselines\\2026-09-17-rtx4060-optimized\\small-load-abba-validated\\2-new.partial.json",
+        "--gpu-timers",
+        "off",
+        "--counts",
+        "10000,100000",
+        "--scenarios",
+        "dense,sparse,sparse_control,refraction_depth,bloom",
+        "--frames",
+        "480",
+        "--warmup",
+        "120",
+        "--repeats",
+        "3"
+      ],
+      "telemetry_before": {
+        "command": [
+          "nvidia-smi",
+          "--query-gpu=name,driver_version,pstate,temperature.gpu,power.draw,power.limit,clocks.gr,clocks.mem,utilization.gpu",
+          "--format=csv"
+        ],
+        "returncode": 0,
+        "output": "name, driver_version, pstate, temperature.gpu, power.draw [W], power.limit [W], clocks.current.graphics [MHz], clocks.current.memory [MHz], utilization.gpu [%]\nNVIDIA GeForce RTX 4060 Laptop GPU, 595.71, P0, 69, 44.40 W, [N/A], 2625 MHz, 8001 MHz, 69 %"
+      },
+      "telemetry_after": {
+        "command": [
+          "nvidia-smi",
+          "--query-gpu=name,driver_version,pstate,temperature.gpu,power.draw,power.limit,clocks.gr,clocks.mem,utilization.gpu",
+          "--format=csv"
+        ],
+        "returncode": 0,
+        "output": "name, driver_version, pstate, temperature.gpu, power.draw [W], power.limit [W], clocks.current.graphics [MHz], clocks.current.memory [MHz], utilization.gpu [%]\nNVIDIA GeForce RTX 4060 Laptop GPU, 595.71, P0, 69, 44.52 W, [N/A], 2625 MHz, 8001 MHz, 82 %"
+      },
+      "binary_sha256": "6dfcdd74c1f498d9acde33d200903009b412ed6149a536dd144d6c5e6fd0a8c3",
+      "shaders": {
+        "bloom.vert": "ed504dd3fa7fc6690b7890a5e8649af706e4d550f9147375d3aa5a023e24f9b9",
+        "bloom_blur.frag": "ea5dd61a58584401b2db2f329a39219689fe598ef57ee1a3298194bc0c216e99",
+        "bloom_composite.frag": "8d460f0a1ce844f142acab845725a6c0d772118b62daba48c1740a758ff2fd5f",
+        "bloom_threshold.frag": "b2be76c31435a3cae450cd0356900cf162381c2e502b3c5c836a344bf87cf6a1",
+        "particle.frag": "57c15baeee5751209730c1f8c450f4e1bd644ed53b2eaf6cab309a888713284d",
+        "particle.vert": "73234cfa3a8ff9649cd025f76f8bf0e6d4ed6fdd3c1094c6d3d9d4877bf521c6",
+        "simulate.comp": "73c6be02b50cc083091701c954bb67f4bd5636852c1a847f83cdf40508cec428",
+        "sort.comp": "3af8ddd5c014f93f92fa5478901186e321540a163e55cea164fb82a0811eafc0"
+      },
+      "raw_sha256": "895013e7110826c7d0b3ec8356408eb76f5a737d40c4bda9f82be8ab3d6681c8",
+      "summary": {
+        "environment": {
+          "schema_version": 1,
+          "workload_version": 1,
+          "backend": "opengl",
+          "variant": "plain",
+          "compiler": "GNU 16.1.0",
+          "build_type": "Release",
+          "system": "Windows AMD64",
+          "gl_vendor": "NVIDIA Corporation",
+          "gl_renderer": "NVIDIA GeForce RTX 4060 Laptop GPU/PCIe/SSE2",
+          "gl_version": "4.3.0 NVIDIA 595.71",
+          "timestamp_bits": 64,
+          "gpu_timers": false,
+          "width": 1280,
+          "height": 720,
+          "seed": 20260917,
+          "dt_seconds": 0.0166666675,
+          "warmup_frames": 120,
+          "measured_frames": 480,
+          "repeats": 3,
+          "samples": 1,
+          "target_format": "RGBA16F+D24",
+          "presentation": "offscreen_no_swap"
+        },
+        "cases": [
+          {
+            "scenario": "bloom",
+            "capacity": 10000,
+            "alive": {
+              "count": 1440,
+              "min": 10000,
+              "mean": 10000.0,
+              "p50": 10000,
+              "p95": 10000,
+              "p99": 10000,
+              "max": 10000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0747,
+                "mean": 0.21726354166666667,
+                "p50": 0.1955,
+                "p95": 0.3262,
+                "p99": 0.5281,
+                "max": 2.1171
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0105,
+                "mean": 0.021689583333333335,
+                "p50": 0.0172,
+                "p95": 0.0455,
+                "p99": 0.0783,
+                "max": 0.1127
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0608,
+                "mean": 0.19545736111111112,
+                "p50": 0.1757,
+                "p95": 0.2935,
+                "p99": 0.4829,
+                "max": 2.0295
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.22037333333333334,
+                "cpu_frame_p50_ms": 0.1955
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.21636708333333335,
+                "cpu_frame_p50_ms": 0.1933
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.22136833333333333,
+                "cpu_frame_p50_ms": 0.1978
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.21636708333333335,
+              "mean": 0.21936958333333334,
+              "p50": 0.22037333333333334,
+              "p95": 0.22136833333333333,
+              "p99": 0.22136833333333333,
+              "max": 0.22136833333333333
+            }
+          },
+          {
+            "scenario": "bloom",
+            "capacity": 100000,
+            "alive": {
+              "count": 1440,
+              "min": 100000,
+              "mean": 100000.0,
+              "p50": 100000,
+              "p95": 100000,
+              "p99": 100000,
+              "max": 100000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.1302,
+                "mean": 0.43641312499999996,
+                "p50": 0.407,
+                "p95": 0.6023,
+                "p99": 0.8067,
+                "max": 2.3182
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0104,
+                "mean": 0.026226805555555552,
+                "p50": 0.0187,
+                "p95": 0.0669,
+                "p99": 0.0954,
+                "max": 0.1543
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0843,
+                "mean": 0.410058125,
+                "p50": 0.3802,
+                "p95": 0.5687,
+                "p99": 0.7475,
+                "max": 2.2844
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.4406216666666667,
+                "cpu_frame_p50_ms": 0.4088
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.43622645833333334,
+                "cpu_frame_p50_ms": 0.4056
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.440905,
+                "cpu_frame_p50_ms": 0.405
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.43622645833333334,
+              "mean": 0.4392510416666667,
+              "p50": 0.4406216666666667,
+              "p95": 0.440905,
+              "p99": 0.440905,
+              "max": 0.440905
+            }
+          },
+          {
+            "scenario": "dense",
+            "capacity": 10000,
+            "alive": {
+              "count": 1440,
+              "min": 10000,
+              "mean": 10000.0,
+              "p50": 10000,
+              "p95": 10000,
+              "p99": 10000,
+              "max": 10000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0502,
+                "mean": 0.06544326388888888,
+                "p50": 0.0556,
+                "p95": 0.0712,
+                "p99": 0.2907,
+                "max": 1.9776
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0033,
+                "mean": 0.004147361111111111,
+                "p50": 0.0039,
+                "p95": 0.0046,
+                "p99": 0.0163,
+                "max": 0.0479
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0456,
+                "mean": 0.061210208333333335,
+                "p50": 0.0517,
+                "p95": 0.0665,
+                "p99": 0.2869,
+                "max": 1.9737
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.06608520833333334,
+                "cpu_frame_p50_ms": 0.0556
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.06523354166666667,
+                "cpu_frame_p50_ms": 0.0554
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.06659541666666667,
+                "cpu_frame_p50_ms": 0.0558
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.06523354166666667,
+              "mean": 0.06597138888888888,
+              "p50": 0.06608520833333334,
+              "p95": 0.06659541666666667,
+              "p99": 0.06659541666666667,
+              "max": 0.06659541666666667
+            }
+          },
+          {
+            "scenario": "dense",
+            "capacity": 100000,
+            "alive": {
+              "count": 1440,
+              "min": 100000,
+              "mean": 100000.0,
+              "p50": 100000,
+              "p95": 100000,
+              "p99": 100000,
+              "max": 100000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0829,
+                "mean": 0.18340006944444442,
+                "p50": 0.1661,
+                "p95": 0.2415,
+                "p99": 0.5248,
+                "max": 2.1795
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0033,
+                "mean": 0.0053590972222222226,
+                "p50": 0.0041,
+                "p95": 0.009,
+                "p99": 0.0406,
+                "max": 0.0792
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0775,
+                "mean": 0.17794930555555558,
+                "p50": 0.1621,
+                "p95": 0.1994,
+                "p99": 0.5206,
+                "max": 2.1754
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.18324833333333332,
+                "cpu_frame_p50_ms": 0.1658
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.18341875,
+                "cpu_frame_p50_ms": 0.1661
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.186178125,
+                "cpu_frame_p50_ms": 0.1663
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.18324833333333332,
+              "mean": 0.1842817361111111,
+              "p50": 0.18341875,
+              "p95": 0.186178125,
+              "p99": 0.186178125,
+              "max": 0.186178125
+            }
+          },
+          {
+            "scenario": "refraction_depth",
+            "capacity": 10000,
+            "alive": {
+              "count": 1440,
+              "min": 10000,
+              "mean": 10000.0,
+              "p50": 10000,
+              "p95": 10000,
+              "p99": 10000,
+              "max": 10000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0625,
+                "mean": 0.078336875,
+                "p50": 0.0655,
+                "p95": 0.1081,
+                "p99": 0.3137,
+                "max": 1.9114
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0038,
+                "mean": 0.005580416666666667,
+                "p50": 0.0044,
+                "p95": 0.0123,
+                "p99": 0.0354,
+                "max": 0.1015
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0551,
+                "mean": 0.07266576388888889,
+                "p50": 0.061,
+                "p95": 0.0889,
+                "p99": 0.2989,
+                "max": 1.8864
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.07778583333333335,
+                "cpu_frame_p50_ms": 0.0657
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.079275,
+                "cpu_frame_p50_ms": 0.0653
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.07997312499999999,
+                "cpu_frame_p50_ms": 0.0656
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.07778583333333335,
+              "mean": 0.07901131944444445,
+              "p50": 0.079275,
+              "p95": 0.07997312499999999,
+              "p99": 0.07997312499999999,
+              "max": 0.07997312499999999
+            }
+          },
+          {
+            "scenario": "refraction_depth",
+            "capacity": 100000,
+            "alive": {
+              "count": 1440,
+              "min": 100000,
+              "mean": 100000.0,
+              "p50": 100000,
+              "p95": 100000,
+              "p99": 100000,
+              "max": 100000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.1125,
+                "mean": 0.24510451388888888,
+                "p50": 0.2205,
+                "p95": 0.3704,
+                "p99": 0.6153,
+                "max": 2.1883
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0038,
+                "mean": 0.007359027777777778,
+                "p50": 0.0046,
+                "p95": 0.0263,
+                "p99": 0.0459,
+                "max": 0.0809
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.088,
+                "mean": 0.2376464583333333,
+                "p50": 0.2158,
+                "p95": 0.3499,
+                "p99": 0.581,
+                "max": 2.1592
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.24724749999999998,
+                "cpu_frame_p50_ms": 0.2206
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.24610791666666668,
+                "cpu_frame_p50_ms": 0.2204
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.24582125000000002,
+                "cpu_frame_p50_ms": 0.2205
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.24582125000000002,
+              "mean": 0.24639222222222223,
+              "p50": 0.24610791666666668,
+              "p95": 0.24724749999999998,
+              "p99": 0.24724749999999998,
+              "max": 0.24724749999999998
+            }
+          },
+          {
+            "scenario": "sparse",
+            "capacity": 10000,
+            "alive": {
+              "count": 1440,
+              "min": 100,
+              "mean": 100.0,
+              "p50": 100,
+              "p95": 100,
+              "p99": 100,
+              "max": 100
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0393,
+                "mean": 0.04945694444444445,
+                "p50": 0.0415,
+                "p95": 0.056,
+                "p99": 0.1834,
+                "max": 1.9378
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0033,
+                "mean": 0.004165347222222222,
+                "p50": 0.0039,
+                "p95": 0.0045,
+                "p99": 0.0164,
+                "max": 0.056
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0356,
+                "mean": 0.045208888888888896,
+                "p50": 0.0377,
+                "p95": 0.0519,
+                "p99": 0.1347,
+                "max": 1.9334
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.05007166666666667,
+                "cpu_frame_p50_ms": 0.0413
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.049637708333333336,
+                "cpu_frame_p50_ms": 0.0417
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.050082916666666664,
+                "cpu_frame_p50_ms": 0.0415
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.049637708333333336,
+              "mean": 0.04993076388888889,
+              "p50": 0.05007166666666667,
+              "p95": 0.050082916666666664,
+              "p99": 0.050082916666666664,
+              "max": 0.050082916666666664
+            }
+          },
+          {
+            "scenario": "sparse",
+            "capacity": 100000,
+            "alive": {
+              "count": 1440,
+              "min": 1000,
+              "mean": 1000.0,
+              "p50": 1000,
+              "p95": 1000,
+              "p99": 1000,
+              "max": 1000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0408,
+                "mean": 0.053502777777777774,
+                "p50": 0.0433,
+                "p95": 0.0717,
+                "p99": 0.2771,
+                "max": 2.4086
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0033,
+                "mean": 0.0045850694444444446,
+                "p50": 0.0039,
+                "p95": 0.0075,
+                "p99": 0.0232,
+                "max": 0.0759
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0372,
+                "mean": 0.04882159722222222,
+                "p50": 0.0393,
+                "p95": 0.0645,
+                "p99": 0.2652,
+                "max": 2.4036
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.05793125,
+                "cpu_frame_p50_ms": 0.0432
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.052797083333333335,
+                "cpu_frame_p50_ms": 0.043
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.05220125,
+                "cpu_frame_p50_ms": 0.0436
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.05220125,
+              "mean": 0.05430986111111111,
+              "p50": 0.052797083333333335,
+              "p95": 0.05793125,
+              "p99": 0.05793125,
+              "max": 0.05793125
+            }
+          },
+          {
+            "scenario": "sparse_control",
+            "capacity": 10000,
+            "alive": {
+              "count": 1440,
+              "min": 100,
+              "mean": 100.0,
+              "p50": 100,
+              "p95": 100,
+              "p99": 100,
+              "max": 100
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.039,
+                "mean": 0.051130833333333334,
+                "p50": 0.0415,
+                "p95": 0.058,
+                "p99": 0.2607,
+                "max": 1.9511
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0033,
+                "mean": 0.004143402777777778,
+                "p50": 0.0039,
+                "p95": 0.0045,
+                "p99": 0.0136,
+                "max": 0.06
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0353,
+                "mean": 0.046900694444444446,
+                "p50": 0.0376,
+                "p95": 0.0537,
+                "p99": 0.2248,
+                "max": 1.9468
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.053274166666666664,
+                "cpu_frame_p50_ms": 0.0413
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.05056416666666667,
+                "cpu_frame_p50_ms": 0.0413
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.05106104166666667,
+                "cpu_frame_p50_ms": 0.0417
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.05056416666666667,
+              "mean": 0.051633125,
+              "p50": 0.05106104166666667,
+              "p95": 0.053274166666666664,
+              "p99": 0.053274166666666664,
+              "max": 0.053274166666666664
+            }
+          },
+          {
+            "scenario": "sparse_control",
+            "capacity": 100000,
+            "alive": {
+              "count": 1440,
+              "min": 1000,
+              "mean": 1000.0,
+              "p50": 1000,
+              "p95": 1000,
+              "p99": 1000,
+              "max": 1000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0411,
+                "mean": 0.052233263888888895,
+                "p50": 0.0433,
+                "p95": 0.0558,
+                "p99": 0.228,
+                "max": 2.0089
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0033,
+                "mean": 0.004073472222222222,
+                "p50": 0.0039,
+                "p95": 0.0045,
+                "p99": 0.0117,
+                "max": 0.0558
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0372,
+                "mean": 0.048072222222222225,
+                "p50": 0.0394,
+                "p95": 0.0499,
+                "p99": 0.2237,
+                "max": 2.0046
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.052069583333333336,
+                "cpu_frame_p50_ms": 0.0429
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.052011249999999995,
+                "cpu_frame_p50_ms": 0.0434
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.05410145833333333,
+                "cpu_frame_p50_ms": 0.0435
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.052011249999999995,
+              "mean": 0.05272743055555556,
+              "p50": 0.052069583333333336,
+              "p95": 0.05410145833333333,
+              "p99": 0.05410145833333333,
+              "max": 0.05410145833333333
+            }
+          }
+        ]
+      }
+    },
+    {
+      "version": "old",
+      "command": [
+        "D:\\Workspace\\Particles\\build\\perf-before\\ember_benchmark_plain.exe",
+        "--shader-dir",
+        "D:\\Workspace\\Particles\\build\\perf-before",
+        "--output",
+        "D:\\Workspace\\Particles\\benchmarks\\baselines\\2026-09-17-rtx4060-optimized\\small-load-abba-validated\\3-old.partial.json",
+        "--gpu-timers",
+        "off",
+        "--counts",
+        "10000,100000",
+        "--scenarios",
+        "dense,sparse,sparse_control,refraction_depth,bloom",
+        "--frames",
+        "480",
+        "--warmup",
+        "120",
+        "--repeats",
+        "3"
+      ],
+      "telemetry_before": {
+        "command": [
+          "nvidia-smi",
+          "--query-gpu=name,driver_version,pstate,temperature.gpu,power.draw,power.limit,clocks.gr,clocks.mem,utilization.gpu",
+          "--format=csv"
+        ],
+        "returncode": 0,
+        "output": "name, driver_version, pstate, temperature.gpu, power.draw [W], power.limit [W], clocks.current.graphics [MHz], clocks.current.memory [MHz], utilization.gpu [%]\nNVIDIA GeForce RTX 4060 Laptop GPU, 595.71, P0, 69, 44.52 W, [N/A], 2625 MHz, 8001 MHz, 82 %"
+      },
+      "telemetry_after": {
+        "command": [
+          "nvidia-smi",
+          "--query-gpu=name,driver_version,pstate,temperature.gpu,power.draw,power.limit,clocks.gr,clocks.mem,utilization.gpu",
+          "--format=csv"
+        ],
+        "returncode": 0,
+        "output": "name, driver_version, pstate, temperature.gpu, power.draw [W], power.limit [W], clocks.current.graphics [MHz], clocks.current.memory [MHz], utilization.gpu [%]\nNVIDIA GeForce RTX 4060 Laptop GPU, 595.71, P0, 69, 39.45 W, [N/A], 2625 MHz, 8001 MHz, 97 %"
+      },
+      "binary_sha256": "4c42b6f91c6826bf4535573afb055ae35fa846182d92b36913acbe18257968fa",
+      "shaders": {
+        "bloom.vert": "ed504dd3fa7fc6690b7890a5e8649af706e4d550f9147375d3aa5a023e24f9b9",
+        "bloom_blur.frag": "ea5dd61a58584401b2db2f329a39219689fe598ef57ee1a3298194bc0c216e99",
+        "bloom_composite.frag": "8d460f0a1ce844f142acab845725a6c0d772118b62daba48c1740a758ff2fd5f",
+        "bloom_threshold.frag": "b2be76c31435a3cae450cd0356900cf162381c2e502b3c5c836a344bf87cf6a1",
+        "particle.frag": "57c15baeee5751209730c1f8c450f4e1bd644ed53b2eaf6cab309a888713284d",
+        "particle.vert": "73234cfa3a8ff9649cd025f76f8bf0e6d4ed6fdd3c1094c6d3d9d4877bf521c6",
+        "simulate.comp": "dcfc86f0777b661705ad2e8504646b6dff1b4fff318bb650765469fc7721f05d",
+        "sort.comp": "db333517f3d58ab8a6847643df0bfab028c35e6485b88babfbd63d2fd7742c40"
+      },
+      "raw_sha256": "0af8a1b85b0a5a929876efbd76597bc83bcaae242186e010544a321c96c12f14",
+      "summary": {
+        "environment": {
+          "schema_version": 1,
+          "workload_version": 1,
+          "backend": "opengl",
+          "variant": "plain",
+          "compiler": "GNU 16.1.0",
+          "build_type": "Release",
+          "system": "Windows AMD64",
+          "gl_vendor": "NVIDIA Corporation",
+          "gl_renderer": "NVIDIA GeForce RTX 4060 Laptop GPU/PCIe/SSE2",
+          "gl_version": "4.3.0 NVIDIA 595.71",
+          "timestamp_bits": 64,
+          "gpu_timers": false,
+          "width": 1280,
+          "height": 720,
+          "seed": 20260917,
+          "dt_seconds": 0.0166666675,
+          "warmup_frames": 120,
+          "measured_frames": 480,
+          "repeats": 3,
+          "samples": 1,
+          "target_format": "RGBA16F+D24",
+          "presentation": "offscreen_no_swap"
+        },
+        "cases": [
+          {
+            "scenario": "bloom",
+            "capacity": 10000,
+            "alive": {
+              "count": 1440,
+              "min": 10000,
+              "mean": 10000.0,
+              "p50": 10000,
+              "p95": 10000,
+              "p99": 10000,
+              "max": 10000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0762,
+                "mean": 0.2131773611111111,
+                "p50": 0.1907,
+                "p95": 0.3252,
+                "p99": 0.5197,
+                "max": 2.312
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0103,
+                "mean": 0.020588680555555555,
+                "p50": 0.0129,
+                "p95": 0.0459,
+                "p99": 0.0787,
+                "max": 0.1784
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0628,
+                "mean": 0.1924759722222222,
+                "p50": 0.1733,
+                "p95": 0.2906,
+                "p99": 0.4917,
+                "max": 2.2953
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.21386375,
+                "cpu_frame_p50_ms": 0.19
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.21542375,
+                "cpu_frame_p50_ms": 0.1924
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.21585770833333334,
+                "cpu_frame_p50_ms": 0.1896
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.21386375,
+              "mean": 0.2150484027777778,
+              "p50": 0.21542375,
+              "p95": 0.21585770833333334,
+              "p99": 0.21585770833333334,
+              "max": 0.21585770833333334
+            }
+          },
+          {
+            "scenario": "bloom",
+            "capacity": 100000,
+            "alive": {
+              "count": 1440,
+              "min": 100000,
+              "mean": 100000.0,
+              "p50": 100000,
+              "p95": 100000,
+              "p99": 100000,
+              "max": 100000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.1376,
+                "mean": 0.43344770833333335,
+                "p50": 0.4031,
+                "p95": 0.5964,
+                "p99": 0.7885,
+                "max": 2.1732
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0102,
+                "mean": 0.022270416666666668,
+                "p50": 0.0136,
+                "p95": 0.0573,
+                "p99": 0.085,
+                "max": 0.1635
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.1097,
+                "mean": 0.41106187499999997,
+                "p50": 0.3832,
+                "p95": 0.5682,
+                "p99": 0.7503,
+                "max": 2.115
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.43739104166666665,
+                "cpu_frame_p50_ms": 0.4045
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.43762395833333334,
+                "cpu_frame_p50_ms": 0.4072
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.4332679166666667,
+                "cpu_frame_p50_ms": 0.3999
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.4332679166666667,
+              "mean": 0.43609430555555556,
+              "p50": 0.43739104166666665,
+              "p95": 0.43762395833333334,
+              "p99": 0.43762395833333334,
+              "max": 0.43762395833333334
+            }
+          },
+          {
+            "scenario": "dense",
+            "capacity": 10000,
+            "alive": {
+              "count": 1440,
+              "min": 10000,
+              "mean": 10000.0,
+              "p50": 10000,
+              "p95": 10000,
+              "p99": 10000,
+              "max": 10000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0535,
+                "mean": 0.06891236111111111,
+                "p50": 0.0562,
+                "p95": 0.0851,
+                "p99": 0.3012,
+                "max": 2.0184
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0032,
+                "mean": 0.004215416666666667,
+                "p50": 0.0037,
+                "p95": 0.0053,
+                "p99": 0.0216,
+                "max": 0.0391
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.05,
+                "mean": 0.06460263888888888,
+                "p50": 0.0524,
+                "p95": 0.0768,
+                "p99": 0.2944,
+                "max": 2.0139
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.06892291666666667,
+                "cpu_frame_p50_ms": 0.0564
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.07039833333333334,
+                "cpu_frame_p50_ms": 0.056
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.06908729166666668,
+                "cpu_frame_p50_ms": 0.0563
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.06892291666666667,
+              "mean": 0.06946951388888889,
+              "p50": 0.06908729166666668,
+              "p95": 0.07039833333333334,
+              "p99": 0.07039833333333334,
+              "max": 0.07039833333333334
+            }
+          },
+          {
+            "scenario": "dense",
+            "capacity": 100000,
+            "alive": {
+              "count": 1440,
+              "min": 100000,
+              "mean": 100000.0,
+              "p50": 100000,
+              "p95": 100000,
+              "p99": 100000,
+              "max": 100000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.1299,
+                "mean": 0.186361875,
+                "p50": 0.1705,
+                "p95": 0.2116,
+                "p99": 0.4942,
+                "max": 2.0339
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0033,
+                "mean": 0.004471875,
+                "p50": 0.0037,
+                "p95": 0.0051,
+                "p99": 0.0271,
+                "max": 0.0659
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.1115,
+                "mean": 0.1817917361111111,
+                "p50": 0.1665,
+                "p95": 0.1938,
+                "p99": 0.4905,
+                "max": 2.0269
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.18680916666666667,
+                "cpu_frame_p50_ms": 0.1702
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.187376875,
+                "cpu_frame_p50_ms": 0.1704
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.1872339583333333,
+                "cpu_frame_p50_ms": 0.1707
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.18680916666666667,
+              "mean": 0.18714,
+              "p50": 0.1872339583333333,
+              "p95": 0.187376875,
+              "p99": 0.187376875,
+              "max": 0.187376875
+            }
+          },
+          {
+            "scenario": "refraction_depth",
+            "capacity": 10000,
+            "alive": {
+              "count": 1440,
+              "min": 10000,
+              "mean": 10000.0,
+              "p50": 10000,
+              "p95": 10000,
+              "p99": 10000,
+              "max": 10000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0629,
+                "mean": 0.08079652777777778,
+                "p50": 0.0664,
+                "p95": 0.1139,
+                "p99": 0.3302,
+                "max": 2.1914
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0037,
+                "mean": 0.005498333333333333,
+                "p50": 0.0043,
+                "p95": 0.0138,
+                "p99": 0.0308,
+                "max": 0.0684
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0587,
+                "mean": 0.07520722222222222,
+                "p50": 0.062,
+                "p95": 0.0905,
+                "p99": 0.3255,
+                "max": 2.1535
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.07990833333333333,
+                "cpu_frame_p50_ms": 0.0666
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.080670625,
+                "cpu_frame_p50_ms": 0.0661
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.08383416666666667,
+                "cpu_frame_p50_ms": 0.0667
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.07990833333333333,
+              "mean": 0.08147104166666667,
+              "p50": 0.080670625,
+              "p95": 0.08383416666666667,
+              "p99": 0.08383416666666667,
+              "max": 0.08383416666666667
+            }
+          },
+          {
+            "scenario": "refraction_depth",
+            "capacity": 100000,
+            "alive": {
+              "count": 1440,
+              "min": 100000,
+              "mean": 100000.0,
+              "p50": 100000,
+              "p95": 100000,
+              "p99": 100000,
+              "max": 100000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.1324,
+                "mean": 0.24862034722222223,
+                "p50": 0.2245,
+                "p95": 0.3762,
+                "p99": 0.586,
+                "max": 2.2291
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0038,
+                "mean": 0.006892152777777777,
+                "p50": 0.0045,
+                "p95": 0.0233,
+                "p99": 0.0473,
+                "max": 0.1285
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.126,
+                "mean": 0.24162375,
+                "p50": 0.22,
+                "p95": 0.3624,
+                "p99": 0.5755,
+                "max": 2.2243
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.2523302083333333,
+                "cpu_frame_p50_ms": 0.2246
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.24641916666666666,
+                "cpu_frame_p50_ms": 0.2242
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.251759375,
+                "cpu_frame_p50_ms": 0.2247
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.24641916666666666,
+              "mean": 0.25016958333333333,
+              "p50": 0.251759375,
+              "p95": 0.2523302083333333,
+              "p99": 0.2523302083333333,
+              "max": 0.2523302083333333
+            }
+          },
+          {
+            "scenario": "sparse",
+            "capacity": 10000,
+            "alive": {
+              "count": 1440,
+              "min": 100,
+              "mean": 100.0,
+              "p50": 100,
+              "p95": 100,
+              "p99": 100,
+              "max": 100
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0402,
+                "mean": 0.04942333333333333,
+                "p50": 0.0423,
+                "p95": 0.0538,
+                "p99": 0.2034,
+                "max": 2.148
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0031,
+                "mean": 0.0038915277777777776,
+                "p50": 0.0037,
+                "p95": 0.0042,
+                "p99": 0.008,
+                "max": 0.0295
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0365,
+                "mean": 0.04544090277777778,
+                "p50": 0.0384,
+                "p95": 0.0491,
+                "p99": 0.2,
+                "max": 2.1301
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.050759791666666665,
+                "cpu_frame_p50_ms": 0.0421
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.05097729166666667,
+                "cpu_frame_p50_ms": 0.0422
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.05195125,
+                "cpu_frame_p50_ms": 0.0426
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.050759791666666665,
+              "mean": 0.05122944444444444,
+              "p50": 0.05097729166666667,
+              "p95": 0.05195125,
+              "p99": 0.05195125,
+              "max": 0.05195125
+            }
+          },
+          {
+            "scenario": "sparse",
+            "capacity": 100000,
+            "alive": {
+              "count": 1440,
+              "min": 1000,
+              "mean": 1000.0,
+              "p50": 1000,
+              "p95": 1000,
+              "p99": 1000,
+              "max": 1000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0634,
+                "mean": 0.0759486111111111,
+                "p50": 0.0657,
+                "p95": 0.0936,
+                "p99": 0.3391,
+                "max": 2.0881
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0031,
+                "mean": 0.004085486111111111,
+                "p50": 0.0037,
+                "p95": 0.0047,
+                "p99": 0.0195,
+                "max": 0.0403
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0596,
+                "mean": 0.07176729166666666,
+                "p50": 0.0619,
+                "p95": 0.0865,
+                "p99": 0.335,
+                "max": 2.084
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.07782625,
+                "cpu_frame_p50_ms": 0.0656
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.076478125,
+                "cpu_frame_p50_ms": 0.0655
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.07506979166666666,
+                "cpu_frame_p50_ms": 0.0659
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.07506979166666666,
+              "mean": 0.07645805555555556,
+              "p50": 0.076478125,
+              "p95": 0.07782625,
+              "p99": 0.07782625,
+              "max": 0.07782625
+            }
+          },
+          {
+            "scenario": "sparse_control",
+            "capacity": 10000,
+            "alive": {
+              "count": 1440,
+              "min": 100,
+              "mean": 100.0,
+              "p50": 100,
+              "p95": 100,
+              "p99": 100,
+              "max": 100
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0395,
+                "mean": 0.05093125,
+                "p50": 0.0418,
+                "p95": 0.056,
+                "p99": 0.2233,
+                "max": 2.057
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0033,
+                "mean": 0.003969652777777778,
+                "p50": 0.0038,
+                "p95": 0.0044,
+                "p99": 0.0126,
+                "max": 0.0502
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0355,
+                "mean": 0.04686930555555555,
+                "p50": 0.038,
+                "p95": 0.0501,
+                "p99": 0.219,
+                "max": 2.0528
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.05296083333333333,
+                "cpu_frame_p50_ms": 0.0419
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.04905416666666666,
+                "cpu_frame_p50_ms": 0.0413
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.05223208333333333,
+                "cpu_frame_p50_ms": 0.0421
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.04905416666666666,
+              "mean": 0.05141569444444444,
+              "p50": 0.05223208333333333,
+              "p95": 0.05296083333333333,
+              "p99": 0.05296083333333333,
+              "max": 0.05296083333333333
+            }
+          },
+          {
+            "scenario": "sparse_control",
+            "capacity": 100000,
+            "alive": {
+              "count": 1440,
+              "min": 1000,
+              "mean": 1000.0,
+              "p50": 1000,
+              "p95": 1000,
+              "p99": 1000,
+              "max": 1000
+            },
+            "metrics": {
+              "cpu_frame_ms": {
+                "count": 1440,
+                "min": 0.0409,
+                "mean": 0.051188333333333336,
+                "p50": 0.0431,
+                "p95": 0.0513,
+                "p99": 0.1933,
+                "max": 2.0078
+              },
+              "cpu_render_ms": {
+                "count": 1440,
+                "min": 0.0033,
+                "mean": 0.0038133333333333335,
+                "p50": 0.0036,
+                "p95": 0.0042,
+                "p99": 0.0068,
+                "max": 0.0386
+              },
+              "cpu_update_ms": {
+                "count": 1440,
+                "min": 0.0373,
+                "mean": 0.04728270833333334,
+                "p50": 0.0394,
+                "p95": 0.0468,
+                "p99": 0.189,
+                "max": 2.0035
+              }
+            },
+            "repeats": [
+              {
+                "repeat": 0,
+                "completed_wall_ms_per_frame": 0.052705625,
+                "cpu_frame_p50_ms": 0.0433
+              },
+              {
+                "repeat": 1,
+                "completed_wall_ms_per_frame": 0.05194625,
+                "cpu_frame_p50_ms": 0.043
+              },
+              {
+                "repeat": 2,
+                "completed_wall_ms_per_frame": 0.05028979166666667,
+                "cpu_frame_p50_ms": 0.043
+              }
+            ],
+            "completed_wall_ms_per_frame": {
+              "count": 3,
+              "min": 0.05028979166666667,
+              "mean": 0.051647222222222226,
+              "p50": 0.05194625,
+              "p95": 0.052705625,
+              "p99": 0.052705625,
+              "max": 0.052705625
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

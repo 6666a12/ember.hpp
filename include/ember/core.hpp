@@ -4,6 +4,9 @@
 
 #include <glm/glm.hpp>
 
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <random>
 
@@ -50,12 +53,14 @@ static_assert(sizeof(Vortex) == 32, "Vortex must stay std430-compatible (32 byte
 
 // Spring-damper pulling particles toward `anchor`:
 //   a = (anchor - p) * stiffness - v * damping
-struct Spring {
+struct alignas(16) Spring {
     glm::vec3 anchor{0.f};
     float stiffness = 0.f;
     float damping = 0.f;
 };
-static_assert(sizeof(Spring) == 20, "Spring must stay std430-compatible (20 bytes)");
+static_assert(sizeof(Spring) == 32, "Spring must match std430 array stride (32 bytes)");
+static_assert(offsetof(Spring, anchor) == 0 && offsetof(Spring, stiffness) == 12 &&
+              offsetof(Spring, damping) == 16, "Spring member offsets must match GLSL");
 
 enum class BlendMode {
     Additive, // glBlendFunc(GL_SRC_ALPHA, GL_ONE)          — default, glows
@@ -71,6 +76,7 @@ struct BurstParams {
     float lifeMin = 1.f, lifeMax = 2.f;
     float sizeMin = 0.05f, sizeMax = 0.12f;
     glm::vec4 colorMin{1.f}, colorMax{1.f};
+    bool refractive = false; // refractive particles (glass shards)
 };
 
 // Small RNG wrapper around std::mt19937. Default-seeded from std::random_device.

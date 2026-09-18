@@ -13,9 +13,9 @@ This guide is for developers embedding ember into an **existing C++ project**. T
 
 | Concern | How ember handles it |
 | --- | --- |
-| GL function loading | host-injected: `gl::init(void* (*)(const char*))`, works with any `GetProcAddress`-style loader |
+| GL function loading | host-injected: `gl::init(GLADloadfunc)`, works with any `GetProcAddress`-style loader |
 | Context ownership | never creates a context, never calls `glfwInit`, never takes over your main loop; only does `glGen*/glBufferData/glDispatchCompute/glDraw*` |
-| State pollution | `render()` sets blend/depth itself and restores `glDepthMask(GL_TRUE)`; bloom uses its own FBO chain and restores the host's bound framebuffer afterwards; everything else (viewport, clears, your VAOs) stays the host's business |
+| State management | `render()` restores read/draw FBOs, viewport, depth state, face-culling and scissor enables; the host must rebind blend state, programs, VAOs, SSBOs and textures before subsequent draws |
 | Multi-instance | any number of `ParticleSystem` instances can coexist (each owns its SSBOs/programs), e.g. one per scene |
 
 **Minimum embedding code** (inside a project that already has a GL context):
@@ -33,6 +33,8 @@ sys.render(view, proj, (float)fbWidthPx, (float)fbHeightPx, fovYDeg);
 ```
 
 ## 2. Dependency checklist
+
+This table describes the OpenGL backend. The CPU facade only requires glm; include `ember/system.hpp` and inject a backend through its constructor. See the [backend notes](docs/backends.md).
 
 | Dependency | Role | Required | How to get it / notes |
 | --- | --- | --- | --- |
@@ -88,27 +90,38 @@ cmake --install build --prefix ~/local
 ```
 
 ```cmake
-find_package(ember REQUIRED)
-target_link_libraries(your_app PRIVATE ember::ember)       # core
-# window wrapper: ember::ember_glfw (needs glfw3)
+find_package(ember REQUIRED COMPONENTS opengl)
+target_link_libraries(your_app PRIVATE ember::opengl)      # core + OpenGL
+# window wrapper: COMPONENTS glfw + ember::ember_glfw (needs glfw3)
 ```
 
-> Note: the `ember::ember` export references the `glad`/`glm` targets, so consumers must provide them first (their own FetchContent or an installed copy). `emberConfig.cmake` tries `find_dependency(glad/glm/glfw3)`.
+> Existing dependency targets are accepted; missing dependencies are located with `find_dependency`. `COMPONENTS core` needs only glm; `opengl` adds glad; `glfw` adds GLFW. Omitting components loads every module built in the installation. `ember::ember` remains the compatibility name for OpenGL.
+
+For source builds, `EMBER_BUILD_OPENGL=OFF` builds only `ember::core`; `EMBER_BUILD_GLFW=OFF` keeps OpenGL without the window module. Both default to ON.
 
 ## 4. Non-CMake workflows
 
-The core library is only **3 .cpp files** (one of them optional) — any build system can swallow it:
+Compile `src/particle_system.cpp` for the CPU facade, then add the following backend files for OpenGL (also listed in `cmake/EmberOpenGLSources.cmake`):
 
 ```
-compile: src/shader.cpp  src/particle_system.cpp  [src/stb_image.cpp — PNG sprites, optional]
+src/particle_system.cpp
+src/backends/opengl/compat.cpp
+src/backends/opengl/resources.cpp
+src/backends/opengl/simulation.cpp
+src/backends/opengl/statistics.cpp
+src/backends/opengl/sort.cpp
+src/backends/opengl/render.cpp
+src/backends/opengl/shader.cpp
+src/backends/opengl/shaders.cpp
+optional: src/backends/opengl/stb_image.cpp (PNG), src/glfw_window.cpp (window)
 headers: include/  (i.e. #include "ember/particle_system.hpp")
 external deps: glad (compile its generated glad.c too), glm (header-only, add include path)
 link: -lGL (Linux) / opengl32 (Windows) plus your window library
 ```
 
 - **Makefile / Bazel / Meson / Xcode / Visual Studio**: just add the files above to your project — no CMake needed.
-- **Dropping stb**: don't compile `src/stb_image.cpp` and don't define `EMBER_USE_STB` → `setSpriteTexture` falls back to the built-in gradient.
-- **Prebuilt static library**: `ember.a` (glad either linked into the same library or separately), distribute the header directory + library, consumers add the include path manually.
+- **Dropping stb**: don't compile `src/backends/opengl/stb_image.cpp` and don't define `EMBER_USE_STB` → `setSpriteTexture` falls back to the built-in gradient.
+- **Prebuilt static libraries**: link `ember`, `ember_core` and glad; add `ember_glfw` and GLFW when using the window module. Distribute the headers and corresponding archives. Consumers must recompile because the class layout changed.
 
 ## 5. Single-header edition (single_header/ember.hpp)
 
@@ -158,7 +171,9 @@ SDL_Window* w = SDL_CreateWindow("demo", 0, 0, 1280, 720, SDL_WINDOW_OPENGL);
 SDL_GLContext ctx = SDL_GL_CreateContext(w);
 SDL_GL_MakeCurrent(w, ctx);
 
-ember::gl::init(reinterpret_cast<void* (*)(const char*)>(SDL_GL_GetProcAddress));
+ember::gl::init(+[](const char* name) -> GLADapiproc {
+    return reinterpret_cast<GLADapiproc>(SDL_GL_GetProcAddress(name));
+});
 
 ember::ParticleSystem sys({100000, 30000});
 // main loop: SDL_Event handling -> sys.update(dt) -> glClear -> sys.render(...) -> SDL_GL_SwapWindow
@@ -175,8 +190,9 @@ ember::ParticleSystem sys({100000, 30000});
 class ParticleView : public QOpenGLWidget {
 protected:
     void initializeGL() override {
-        ember::gl::init(reinterpret_cast<void* (*)(const char*)>(
-            QOpenGLContext::currentContext()->getProcAddress));
+        ember::gl::init(+[](const char* name) -> GLADapiproc {
+            return reinterpret_cast<GLADapiproc>(QOpenGLContext::currentContext()->getProcAddress(name));
+        });
         sys = std::make_unique<ember::ParticleSystem>(ember::ParticleSystem::Settings{100000, 30000});
         sys->setGravity({0.f, -9.81f, 0.f});
     }
@@ -207,15 +223,14 @@ Key points:
 #include <windows.h>
 #include "ember/particle_system.hpp"
 
-static void* winLoader(const char* name) {
-    // wglGetProcAddress covers core/extension functions beyond 1.1;
-    // a few base functions (e.g. glGetString) need the GetProcAddress fallback.
-    void* p = reinterpret_cast<void* (*)(const char*)>(wglGetProcAddress(name));
-    if (!p) {
+static GLADapiproc winLoader(const char* name) {
+    PROC p = wglGetProcAddress(name);
+    const auto address = reinterpret_cast<std::intptr_t>(p);
+    if (!p || address == 1 || address == 2 || address == 3 || address == -1) {
         HMODULE m = GetModuleHandleA("opengl32.dll");
-        if (m) p = reinterpret_cast<void* (*)(const char*)>(GetProcAddress(m, name));
+        p = m ? GetProcAddress(m, name) : nullptr;
     }
-    return p;
+    return reinterpret_cast<GLADapiproc>(p);
 }
 
 // after: create window -> choose pixel format -> wglCreateContext -> wglMakeCurrent
@@ -226,7 +241,9 @@ ember::gl::init(winLoader);
 
 ```cpp
 // same pattern as WGL, loader = eglGetProcAddress (also needs the library fallback):
-ember::gl::init(reinterpret_cast<void* (*)(const char*)>(eglGetProcAddress));
+ember::gl::init(+[](const char* name) -> GLADapiproc {
+    return reinterpret_cast<GLADapiproc>(eglGetProcAddress(name));
+});
 ```
 
 Windowless rendering (offscreen FBO, servers, tests): create an EGL pbuffer context or use `EGL_KHR_surfaceless_context`; `sys.update(dt)` runs the compute pipeline fine; `render()` needs a real viewport — bind an FBO offscreen and pass its width/height and fov.
@@ -234,20 +251,64 @@ Windowless rendering (offscreen FBO, servers, tests): create an EGL pbuffer cont
 ## 7. Coexistence with a host renderer
 
 - **Depth**: particles default to additive blending, depth test off, no depth writes. If the scene needs particles occluded by geometry: `sys.setDepthTest(true); sys.setDepthWrite(true);` (draw opaque geometry first, then particles).
-- **Soft particles**: render the scene depth into a depth texture (`GL_DEPTH_COMPONENT24`, `Texture::uploadDepth` works) and call `sys.setSoftParticles(true, depthTexId, radius)`; refresh it before the particles each frame.
+- **Coordinate/depth convention**: the projection passed to `render()` and host depth textures follow GL conventions (NDC z ∈ [-1,1], framebuffer origin bottom-left); hosts using [0,1] depth or top-left origins must adapt their projection and depth export.
+- **Soft particles**: render the scene depth into a depth texture (`GL_DEPTH_COMPONENT24`, `Texture::uploadDepth` works) and call `setOpenGLSoftParticles(sys, true, depthTexId, radius)`; refresh it before the particles each frame.
+- **Refractive particles**: particles with `[emitter] refractive = true` need the host to render its scene into a color texture (RGBA, `CLAMP_TO_EDGE` — `Texture::uploadRGBA8` already sets this), passed via `setOpenGLRefraction(sys, settings)` (`settings.sceneColorTex`); the refraction pass replaces pixels straight onto the host framebuffer after the bloom composite, with glints from the specular term (not bloom). See the `ScenePass` in `examples/glass.cpp`.
 - **Bloom**: with `sys.setBloom(true)` the `render()` uses its own FBO chain (half-res RGBA16F bright/blur) and restores the host's currently bound framebuffer afterwards; no host changes needed.
+
+Refraction also honors explicit `setDepthTest` / `setDepthWrite` (both default off). Its coverage includes particle alpha, lifetime fade and sprite mask; fully transparent fragments do not write depth. Depth refraction bends the ray using `ior` (`ior=1` is the identity), and `strength` scales the projected displacement. Simple/noise modes still interpret strength as a UV offset. Spin accepts signed angular velocity; soft radius must be positive. See the [effect audit](docs/effects-audit.md) for coverage and remaining approximations.
 - **Blend state**: `render()` sets the blend function itself and does not restore it afterwards — if that conflicts with the host, re-set your state after the particles (`glDisable(GL_BLEND)` after render).
-- **Viewport/scissor**: `render()` never calls `glViewport`/`glScissor` — that's the host's job.
+- **Viewport/scissor**: render() uses supplied dimensions at origin (0,0), then restores the host viewport. Scissor state is unchanged.
 - **Resize**: just set the viewport again — no need to rebuild the system (pass the height from `framebufferSize()` each frame).
-- **Multiple systems**: `ParticleSystem` instances don't interfere; each compiles its own default shaders (acceptable; share via `setPrograms` with one Shader if you care).
+- **Multiple systems**: `ParticleSystem` instances don't interfere; each compiles its own default shaders (acceptable; share via `setOpenGLPrograms` with one Shader if you care).
 - **Threading**: all ember calls must happen on the thread that owns the GL context (Qt's paintGL, your render thread, etc.).
+
+Loader callbacks use `GLADloadfunc`. Pass `glfwGetProcAddress` directly; use typed adapters for SDL/Qt/EGL, converting the returned address rather than the callback type. Destroy GPU resources while their owning context is current. GLFW callback exceptions are deferred until the next event-processing wrapper call on the same thread.
+
+Custom shader protocol: binding 4 allocates eight uints (32 B). The first five remain `uAlive/uDeadHead/uSpawnRequestCount/uCapacity/uAllocated`; the trailing fields are `uSpawnReuse/uSpawnAppendBase/uSpawnAccepted`. Default synchronous mode reads the first 20 B; GPU mode samples them asynchronously. Spring stride remains 32 B and depth reconstruction uses `uInvProj = inverse(proj)`.
+
+- The built-in simulation declares `uInputAlive`, selecting the live-list protocol. Phase 0 integrates binding 11, appends survivors to binding 12 and increments indirect instanceCount; retirement writes tombstones to both particle buffers. Phase 3 reserves all recycled/appended birth slots in one invocation and updates the counters/reservation fields. Phase 1 samples births and appends their indices. Phase 2 publishes final indirect instanceCount in one invocation. SSBO barriers separate phases, with command/buffer-update barriers at completion; both particles and live lists are swapped after update.
+- Legacy simulations without `uInputAlive` retain the allocated-extent, three-phase protocol: phase 0 integrates, phase 1 spawns, phase 2 writes binding 11 and draw args. The five-counter prefix is unchanged. Switching back to the optimized protocol copies current tombstones to the other particle buffer once.
+- Sort shaders declaring `uTileMode` select the 256-thread tiled protocol. Binding 12 is rebound to a separate depth-key cache: `uMode=0/uTileMode=1` initializes and sorts tiles; `uMode=1/uTileMode=0` performs global steps with `uJ>=256`; `uMode=1/uTileMode=2` finishes `uJ=128..1` for the current `uK`. Legacy shaders without that uniform retain the 64-thread mode 0/1 protocol.
+- Opting into either protocol requires implementing its complete layout and stage semantics, not merely adding a uniform. Sorting still uses `uAlive/uCapacity` and the capacity sentinel. Built-in equal-depth ties are ordered by stable slot ID. CPU API, stable particle identity and immediate `aliveCount()` semantics are unchanged.
+
+
+### GPU scheduling and asynchronous statistics (opt-in)
+
+The default mode still reads counters synchronously on every update. Enable GPU scheduling during initialization:
+
+```cpp
+sys.setGpuDriven(true);
+// Each frame:
+sys.update(dt);
+sys.render(view, proj, width, height, fov);
+const auto stats = sys.pollStatistics();
+// stats.alive / stats.allocated belong to stats.frame, possibly an older update.
+const auto lag = sys.updateSequence() - stats.frame;
+```
+
+Integration, sorting and drawing in `update()` / `render()` use GPU counts, independently of CPU telemetry. `pollStatistics()` checks fences with zero timeout and reads only completed, separate staging buffers. Without new data it returns the previous snapshot (initially all zero). When all four slots are busy, the update skips telemetry and increments the cumulative `droppedStatistics()` count instead of waiting.
+
+`Statistics::frame` identifies the sampled update; `updateSequence()` identifies the latest submitted update. `clear()` and capacity changes cancel pending samples and publish known zero counts without resetting the sequence. `allocated` is the occupied slot extent including free slots. The final update is not guaranteed to have a ready sample: use `synchronizeStatistics()` for exact current counts. `aliveCount()` and `readParticles()` retain their immediate, exact semantics and can therefore synchronize in GPU mode; use polling for UI counters.
+
+Disabling GPU scheduling synchronizes counts once. Polling, mode changes, updating, rendering and destruction require the owning GL context to be current; pass the plain statistics value to UI threads instead of invoking GL there. GPU mode skips the per-particle synchronous `EMBER_DEBUG` readback logs. This option currently has a C++ API only, without an INI key.
+
+GPU shader protocol:
+
+- Internal `schedule.comp` always uses its embedded copy and is not replaced by `setShaderDirectory()`. Binding 13 is a uint array: word 0 holds input alive, word 1 holds padded sort N, words 2–4 hold integration dispatch x/y/z, and word 5 onward holds consecutive three-word sort commands.
+- Scheduler phase 0 resets binding 10 draw args, writes the request count and produces `ceil(alive/64)` integration groups. When sorting is enabled, scheduler phase 1 follows simulation phases 0/3/1/2 and generates sort commands: initialization, then `k=512..nextPow2(capacity)`, global steps `j=k/2..256` plus one local tail per k. Stages above actual padded N have x=0; an empty system has x=0 for every sort command. Shader-storage / command barriers publish indirect arguments.
+- Custom simulations must implement the complete protocol with active `uInputAlive` and `uGpuDriven` uniforms. With `uGpuDriven=1`, integration bounds come from binding 13 word 0, not CPU `uInputAlive`. Sorting requires `uTileMode` and `uGpuDriven`, reading alive from binding 4 and padded N from binding 13 word 1. Synchronous mode sets `uGpuDriven=0` and uses the original uniforms.
+- Incompatible custom programs throw when enabling GPU mode, replacing simulation or enabling sort. Synchronous mode retains legacy shader compatibility. Uniform checks identify a protocol, not proof that custom code implements it correctly.
+- Capacity is checked against the device's X workgroup limit: both `ceil(capacity/64)` and `ceil(nextPow2(capacity)/256)` must fit. GPU sorting reserves keys for capacity and submits capacity-sized stage sequences with inactive GPU commands. Small populations and excess capacity can therefore have higher submission cost than synchronous mode.
+
+This removes the forced counter-read dependency; OpenGL can still block on driver queues or allocations. See [benchmarks](benchmarks/README.md) for measured throughput.
 
 ## 8. Custom shaders / force extension contract
 
-Default GLSL lives in `shaders/` (the canonical copies; the embedded copies inside `src/particle_system.cpp` are what actually runs). Copy and modify, then:
+GLSL files in `shaders/` load first; simulation, particle rendering and sorting fall back to embedded copies on failure. Missing Bloom files disable that effect. Copy and modify, then:
 
 ```cpp
-sys.setPrograms(
+setOpenGLPrograms(sys.backend(), 
     ember::Shader::fromFiles({{GL_VERTEX_SHADER, "my.vert"},
                               {GL_FRAGMENT_SHADER, "my.frag"}}),
     ember::Shader::fromFiles({{GL_COMPUTE_SHADER, "my.comp"}}));
@@ -257,25 +318,77 @@ Contract (must be preserved, otherwise undefined behavior):
 
 | Binding | Buffer | Notes |
 | --- | --- | --- |
-| 0 | `cur` / `particles` | sim read; render VS read (`Particle` array, std430) |
-| 1 | `nxt` | sim write (whole struct) |
+| 0 | `cur` / `particles` | sim reads and writes retirement tombstones; render VS reads (`Particle` array, std430) |
+| 1 | `nxt` | next particles; phases 0/1 write |
 | 2 | `req` | spawn requests (`SpawnRequest[]`, std430, see emitters.hpp), read-only; GPU samples spawns |
 | 3 | `dead` | free-slot stack, `coherent` |
-| 4 | `counters` | `uAlive uDeadHead uSpawnRequestCount uCapacity`, `coherent` |
+| 4 | `counters` | `uAlive uDeadHead uSpawnRequestCount uCapacity uAllocated uSpawnReuse uSpawnAppendBase uSpawnAccepted`, `coherent` |
 | 5 | `attractors` | `vec4` array, read-only |
 | 6 | `vortexes` | `Vortex` array (`vec4 center` + `vec4 axisStrength`), read-only |
-| 7 | `springs` | `Spring` array (`vec3 anchor` + 2 floats), read-only |
+| 7 | `springs` | `Spring[]`: std430 stride **32 B**, offsets anchor=0, stiffness=12, damping=16 |
 | 8 | `sorted` | sorted particle indices (render VS read; only when `uUseSorted=1`) |
 | 9 | `palette` | palette colors `vec4[]` (GPU spawn), read-only |
 | 10 | `indirect` | indirect draw args (`vertexCount/instanceCount/firstVertex/baseInstance`; written by phase 2, read by `glDrawArraysIndirect`) |
+| 11 | `liveIndices` | current live indices; sim/render/sort read; swapped with next list after update |
+| 12 | `nextLiveIndices / sortKeys` | next live-list output during sim; separate cached-depth buffer during sort |
+| 13 | `schedule` | GPU scheduling metadata and indirect compute commands |
 
 > ⚠️ **Breaking change (0.x)**: binding 2 went from "full `Particle[]` staging" to "`SpawnRequest[]` spawn requests" — hosts with custom spawn shaders must migrate to the new contract.
 
-- sim uniforms: `uDt uTime uPhase uForceMask uGravity uDrag uDragMode uWind uTurbulence uAttractorCount uVortexCount uSpringCount uNoiseWindDir uNoiseWindAmp uNoiseWindScale uNoiseWindSpeed uWaveDir uWaveK uWaveAmp uWaveOmega uBoundaryMode uBoundaryY uRestitution uSpawnTotal uFrameSeed` (`uPhase=0` integrate, `=1` spawn, `=2` write indirect args — three dispatches; `uSpawnTotal` = total particles requested this frame, `uFrameSeed` = GPU spawn RNG seed; `uForceMask` bit i = `ember::Force` value i, disabled forces cost nothing)
-- render VS uniforms: `uView uProj uSizeScale uStreak uUseSorted` (`uUseSorted=1` reads particles via `sorted[gl_InstanceID]`, else `gl_InstanceID`; `uStreak>0` stretches quads along the view-projected velocity); render FS uniforms: `uSprite uUseSprite uSheetCols uSheetRows uSceneDepth uInvViewProj uSoftRadius uViewportSize uUseSoft` (`uUseSprite=1` texture + frame animation, `=0` procedural glow; `uUseSoft=1` fades near scene depth; `vFadeRGB` varying comes from `life.yzw` for fade-to-color)
+- The built-in shaders no longer use loose uniforms — scalars are packed into std140 uniform blocks (the same GLSL compiles to SPIR-V; CPU mirrors with layout asserts live in `src/backends/opengl/params.hpp`): simulation `SimParams` binding 14, sort `SortParams` binding 15, internal scheduling `ScheduleParams` binding 16, render VS `DrawParams` binding 17, render FS `FragParams` binding 18, bloom `BloomParams` binding 19. Block members keep the old loose-uniform names, with one exception: the fragment block renames `uProj`/`uRefraction` to `uFragProj`/`uFragRefraction` (members of instance-less blocks share one global namespace and would collide with the vertex block). Sim block members: `uDt uTime uPhase uForceMask uGravity uDrag uDragMode uWind uTurbulence uAttractorCount uVortexCount uSpringCount uNoiseWindDir uNoiseWindAmp uNoiseWindScale uNoiseWindSpeed uWaveDir uWaveK uWaveAmp uWaveOmega uBoundaryMode uBoundaryY uRestitution uSpawnTotal uFrameSeed uInputAlive uGpuDriven` (`uPhase=0` integrate live indices, `=3` reserve birth slots, `=1` spawn, `=2` publish indirect args — up to four dispatches; `uSpawnTotal` = total particles requested this frame, `uFrameSeed` = GPU spawn RNG seed; `uForceMask` bit i = `ember::Force` value i, disabled forces cost nothing)
+- Compatibility path: the backend still writes the legacy loose uniforms (VS `uView uProj uSizeScale uStreak uUseSorted`, FS `uSprite uUseSprite uSheetCols uSheetRows uSceneDepth uInvProj uSoftRadius uViewportSize uUseSoft`, etc.), so custom shaders written against the old contract need no changes; new custom shaders should declare the same block members (protocol detection sees block members too). Samplers carry explicit bindings: `uSprite`=0, `uSceneDepth`=1, `uSceneColor`=2. With `uUseSorted=1` the particle index comes from `sorted[gl_InstanceID]`, else `liveIndices[gl_InstanceID]`; `uStreak>0` stretches quads along the view-projected velocity; `uUseSprite=1` selects texture sampling + frame animation, `=0` the procedural glow; `uUseSoft=1` fades near scene depth; the `vFadeRGB` varying comes from `life.yzw` for fade-to-color
+- Build-time SPIR-V: with `-DEMBER_BUILD_SPIRV=ON` (default) and glslangValidator on PATH, the `ember_spirv` target compiles all of `shaders/` into `build/generated/spirv/` (`--target-env vulkan1.0`), ready for a future Vulkan backend to load directly — no runtime compiler dependency
 - Draw call: `glDrawArraysIndirect(GL_TRIANGLE_STRIP, 0)` — 4 vertices per particle, VS expands the quad from `gl_VertexID` in view space, no vertex attributes; the instance count comes from the GPU-written binding-10 args (CPU readback not on the render path)
+- **Refractive particles (glass shards)**: particles with `[emitter] refractive = true` (or `BurstParams::refractive`) are sign-encoded in `pos.w` (negative size) and rendered in a separate pixel-replacement pass (blending off) that samples the host's scene color texture (**texture unit 2** `uSceneColor`); new FS uniforms: `uRefraction uRefrMode uRefrShape uRefrDome uRefrStrength uRefrIor uRefrTint uRefrAbsorption uRefrFresnel uRefrChroma uRefrSpecular uRefrLightDir`; shard silhouettes can be procedural polygons (`uRefrShape=1`: 3-5 sides, per-edge jitter), and `uRefrDome` controls the dome-normal strength (silhouette rim light + glint spots, 0 = flat facet); presets `ember::Refraction::glass()/heat()/water()/prism()`; the host renders its scene into a color texture and passes it via `setOpenGLRefraction(sys, ...)` (see §7)
+- **Billboard spin**: `sys.setSpin(speed)` / `[system] spin` uses a stable-slot hash angle plus age-based spin (`uSpinSpeed`). A visible streak controls orientation; below 10% extra elongation it blends toward the ordinary orientation, preserving spin at rest. Refraction geometry and facet normals use the same final angle. See the [streak notes](docs/streak.md).
 - `Particle` layout (CPU/GPU must match, 64 bytes): `pos(xyz,size) vel(xyz,age) life(lifetime; <0=corpse) color(rgba)`
 - **Common extension points**: add custom forces in the force-accumulation section of `simulate()` (vortices, springs, noise fields, collisions); change billboard size/shape (or the streak/orientation logic) in the VS; swap the glow curve or add textures in the FS; change `sort.comp`'s key (e.g. distance instead of depth).
+
+### Vulkan host integration (optional backend)
+
+`ember::vulkan` is a peer of the GL backend and matches its feature set (GPU scheduling, depth sorting, PNG sprites, soft particles, refraction, bloom). Minimal integration:
+
+```cpp
+#include "ember/system.hpp"
+#include "ember/vulkan.hpp"
+
+ember::VulkanDevice device = ember::makeVulkanDevice();   // self-contained; use your own device in production
+auto backend = ember::makeVulkanBackend();
+ember::setVulkanContext(*backend, device.context());       // borrowed instance/physicalDevice/device/queue
+ember::ParticleSystem sys({100000, 30000}, std::move(backend));
+
+// Per frame: inject the host frame target (color/depth views) before rendering.
+ember::VulkanFrameTarget target{};
+target.colorView = myColorView;   // layout must be COLOR_ATTACHMENT_OPTIMAL
+target.depthView = myDepthView;   // optional; layout must be DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+target.colorFormat = VK_FORMAT_R8G8B8A8_UNORM;
+target.depthFormat = VK_FORMAT_D32_SFLOAT;
+target.width = 1920; target.height = 1080; target.frameIndex = frameCounter;
+ember::setVulkanFrameTarget(sys.backend(), target);
+
+sys.update(dt);
+sys.render(view, proj, 1920.f, 1080.f, 50.f);
+```
+
+- **Coordinate/depth convention**: `render()` takes the same GL-style projection matrix as the GL backend; the vertex shader remaps clip z into Vulkan's `[0,w]` (via `EMBER_CLIP_VULKAN`) and uses a negative viewport height to flip Y, keeping the bottom-left screen origin for UV/`gl_FragCoord`. Hosts using a zero-to-one projection get numerically identical depth and can feed host depth textures straight into soft particles/refraction.
+- **Injected resources are borrowed**: context, frame target, and soft-particle/refraction views/samplers stay owned by the host and must live while the backend uses them. The backend never takes over the swapchain and issues no cross-resource layout barriers (the host guarantees layouts on entry/exit of `render()`).
+- **Soft particles / refraction**: `setVulkanSoftDepth(backend, depthView, sampler)` (clamp + linear sampler; view in `SHADER_READ_ONLY_OPTIMAL`); `setVulkanRefractionInputs(backend, colorView, depthView, sampler)`. Refraction mode 1 falls back to mode 0 without a depth texture, exactly like GL.
+- **Bloom**: after `sys.setBloom(true)`, `render()` drives its own RGBA16F full/half-resolution chain. The host depth view is reused directly as the HDR particle pass depth attachment (`loadOp=LOAD`); occlusion engages automatically for `D16/D32/D24S8/D32S8` depth views, otherwise it is skipped (mirroring GL's `bits==0` branch). Any bloom resource failure disables bloom with a warning instead of throwing.
+- **The single-header build stays GL-only**; the Vulkan backend ships with the modular build only.
+- **Validation**: with `EMBER_VK_DEBUG=1`, `makeVulkanDevice()` enables validation layers (degrades silently when absent). Multi-backend coexistence needs no special handling: a GL context and a VkDevice can live in one process, each using its own handles.
+- **Host command-buffer recording (WO-10)**: engines that own their command buffers can have `update()`/`render()` record into them instead of letting the backend submit:
+
+```cpp
+VkCommandBuffer cmd = /* your already-begun command buffer */;
+ember::beginVulkanFrame(sys.backend(), cmd, frameCounter);
+sys.update(dt);
+sys.render(view, proj, 1920.f, 1080.f, 50.f);
+ember::endVulkanFrame(sys.backend());
+/* submit and wait your cmd yourself */
+auto stats = sys.synchronizeStatistics(); // or aliveCount()/readParticles()
+```
+
+  Inside the window the backend does not submit, signal fences, or rotate its frame ring. The host must keep the `kFramesInFlight=2` resource discipline (do not record frame N+2 into a slot whose frame N command buffer is in flight) and must submit and wait its command buffer before exact statistics/readback calls. `synchronizeStatistics()`/`aliveCount()`/`readParticles()` throw `std::logic_error` while the window is open; `setVulkanFrameTarget` must be set before `beginVulkanFrame` and its `frameIndex` must resolve to the same slot.
 
 ## 9. Compatibility & fallbacks (macOS / OpenGL 4.1)
 
@@ -317,13 +430,13 @@ Translate the simulation kernels (integration + free-stack recycling + force fie
 ## 10. FAQ
 
 **Q: How do I build behind a corporate proxy / offline?**
-The repo vendors its dependency tarballs in `deps/`: `cmake -S . -B build -DEMBER_DEPS_DIR=<absolute path to deps>` and FetchContent extracts locally — fully offline. The one exception: the glad generator needs local Python 3 + `jinja2`, and the first generation pulls gl.xml from Khronos (the result is cached in the build dir; offline afterwards).
+The repo vendors its dependency tarballs in `deps/`: `cmake -S . -B build -DEMBER_DEPS_DIR=<absolute path to deps>` and FetchContent extracts locally — fully offline. The glad generator needs local Python 3 + `jinja2`. Generation uses `REPRODUCIBLE` and the bundled specification, without downloading gl.xml.
 
 **Q: How do I wire up the single-header build?**
 The essentials are glad (`glad.h` + `glad.c`) and glm. Copy `single_header/ember.hpp` into your project, `#define EMBER_IMPLEMENTATION` and include it once in one .cpp; compile `glad.c` as usual and call `ember::gl::init(loader)`. A complete example is `tests/single_header_test.cpp` (depends only on the single header + glad/glfw/glm — not on the ember library).
 
 **Q: Can I drop the stb_image PNG dependency?**
-Yes. Don't define `EMBER_USE_STB` (modular path: don't compile `src/stb_image.cpp`) — `setSpriteTexture` falls back to the built-in gradient with a warning.
+Yes. Don't define `EMBER_USE_STB` (modular path: don't compile `src/backends/opengl/stb_image.cpp`) — `setSpriteTexture` falls back to the built-in gradient with a warning.
 
 **Q: Will the interactive editor (WASD-move emitters etc.) leak into my project?**
 No. The editor lives only in the example programs, gated by the CMake option `EMBER_BUILD_EDITOR` (default ON, examples only); `-DEMBER_BUILD_EDITOR=OFF` or dropping the examples removes it entirely. The library itself contains no editor code; the runtime toggle is `[system] editor = false`.
@@ -334,8 +447,8 @@ Compute shaders (4.3) are a hard requirement. Fallback: CPU simulation + instanc
 **Q: Does it work on macOS?**
 No. macOS caps at GL 4.1 (no compute). Alternatives: port the simulation to Metal, or update particle data on the CPU/compute queue before `render()` (see §9).
 
-**Q: Does the 16-byte per-frame readback stall?**
-`glGetBufferSubData` triggers an implicit sync; on modern drivers the overhead is sub-millisecond one-off. The render path no longer depends on it (the instance count comes from GPU indirect args) — the readback only feeds `aliveCount()`/UI. If you're latency-sensitive (VR), move the readback to frame-end + consume at frame-start (double buffering).
+**Q: Does the 20-byte per-frame readback stall?**
+In default mode it can. Use `setGpuDriven(true)` with `pollStatistics()` to remove this per-update dependency (see section 7). Explicit exact queries still synchronize when needed.
 
 **Q: How do I pick the particle capacity?**
 Steady-state live particles ≈ total spawn rate × average lifetime. Set `capacity` to that plus headroom; `maxSpawnPerFrame` guards against single-frame spikes. Example: 7000/s × 2.75s ≈ 19k, config uses 150k for lots of headroom. See `config/stress.ini` (1M capacity, ~850k steady state).
@@ -344,4 +457,4 @@ Steady-state live particles ≈ total spawn rate × average lifetime. Set `capac
 Check the path and the `[section]` syntax (`#` comments, `key = value`, comma-separated vectors). Parse errors throw a `std::runtime_error` with a line number; the examples print it and keep the previous config. Enum values like `blend`/`shape` are case-insensitive.
 
 **Q: Do slots leak when the spawn rate drops below the death rate?**
-Some slots stay as "corpses" (no visual impact, just capacity); if the mismatch persists, reconfigure capacity per the steady-state formula. When the ring free-stack overflows it drops its oldest entries — no double-write race.
+No. Each retired slot is pushed once and reused before appending. The allocated extent can exceed the current population; clear() resets it.

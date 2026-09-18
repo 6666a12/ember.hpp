@@ -1,0 +1,44 @@
+#version 430 core
+// Internal scheduler: never overridden via setShaderDirectory. All commands
+// are bounded by capacity, which the host validates against GL device limits.
+layout(local_size_x=1) in;
+layout(binding=4,std430) buffer Counters {
+    uint alive; uint deadHead; uint requests; uint capacity; uint allocated;
+};
+layout(binding=10,std430) buffer Draw {
+    uint vertexCount; uint instanceCount; uint firstVertex; uint baseInstance;
+};
+// words[0]=inputAlive, [1]=padded sort size, [2..4]=integration command,
+// [5..]=three-word tiled sort commands in host submission order.
+layout(binding=13,std430) buffer Schedule { uint words[]; };
+// Event queue header (WO-08): reset here alongside the other frame counters.
+layout(binding=22,std430) buffer EventQueue { uint head; uint totalChildren; };
+// CPU mirror: ScheduleParams in src/backends/opengl/params.hpp.
+layout(binding = 16, std140) uniform ScheduleParams {
+    int uSchedulePhase; uint uRequestCount;
+};
+uint padded(uint n) {
+    uint p=1u; while(p<n) p<<=1u; return p;
+}
+void command(uint offset,uint x) {words[offset]=x;words[offset+1u]=1u;words[offset+2u]=1u;}
+void main() {
+    uint count=min(alive,capacity);
+    if(uSchedulePhase==0) {
+        words[0]=count;
+        command(2u,(count+63u)/64u);
+        requests=uRequestCount;
+        vertexCount=4u;instanceCount=0u;firstVertex=0u;baseInstance=0u;
+        head=0u;totalChildren=0u;
+    } else {
+        uint n=padded(count),maxN=padded(capacity);
+        words[1]=n;
+        uint groups=count==0u?0u:(n+255u)/256u;
+        command(5u,groups);
+        uint offset=8u;
+        for(uint k=512u;k<=maxN;k<<=1u) {
+            uint stageGroups=k<=n?groups:0u;
+            for(uint j=k>>1u;j>=256u;j>>=1u) {command(offset,stageGroups);offset+=3u;}
+            command(offset,stageGroups);offset+=3u;
+        }
+    }
+}

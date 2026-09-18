@@ -15,6 +15,10 @@
 #include <glm/glm.hpp>
 
 #include <cstdio>
+#include <memory>
+#include <cmath>
+#include "regressions.hpp"
+#include "behavior.hpp"
 #include <cstdlib>
 #include <vector>
 
@@ -24,18 +28,21 @@ int g_failures = 0;
     do {                                                                  \
         if (!(cond)) {                                                    \
             std::printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #cond);   \
-            ++g_failures;                                                 \
+            throw std::runtime_error(#cond);                                                 \
         }                                                                 \
     } while (0)
 } // namespace
 
 int main() {
-    ember::Window* win = nullptr;
+    std::unique_ptr<ember::Window> win;
     try {
-        win = new ember::Window(128, 128, "ember single-header test", 0, /*vsync=*/false, /*visible=*/false);
-    } catch (const std::exception& e) {
+        win = std::make_unique<ember::Window>(128, 128, "ember single-header test", 0, /*vsync=*/false, /*visible=*/false);
+    } catch (const ember::ContextUnavailable& e) {
         std::printf("SKIP: cannot create GL 4.3 context: %s\n", e.what());
         return 77;
+    } catch (const std::exception& e) {
+        std::printf("FAIL: GL initialization: %s\n", e.what());
+        return 1;
     }
 
     try {
@@ -60,10 +67,11 @@ int main() {
         // GPU-spawned particles must lie inside the configured ranges
         sys.setForceMask(0);
         sys.setGravity({0.f, 0.f, 0.f});
+        sys.clear();
         for (int i = 0; i < 5; ++i) sys.update(1.f / 60.f);
         bool speedOk = true, sizeOk = true, lifeOk = true;
         int fresh = 0;
-        for (const auto& p : sys.readParticles()) {
+        for (const auto& p : regression::particles(sys)) {
             if (p.vel.w < 0.1f) {
                 ++fresh;
                 const float sp = glm::length(glm::vec3(p.vel));
@@ -88,7 +96,7 @@ int main() {
             sys2.addEmitter(e2);
             for (int i = 0; i < 3; ++i) sys2.update(1.f / 60.f);
             bool allPal = true;
-            for (const auto& p : sys2.readParticles()) {
+            for (const auto& p : regression::particles(sys2)) {
                 if (p.color != e2.palette[0] && p.color != e2.palette[1]) allPal = false;
             }
             CHECK(allPal);
@@ -135,8 +143,71 @@ int main() {
         CHECK(renderOnce() > 0);
         sys.setBloom(false);
 
-        delete win;
-        win = nullptr;
+        sys.clear();
+        sys.clearEmitters();
+        // ---- refraction: pixel check (glass refracts a host scene texture) ------
+        {
+            ember::Texture scene;
+            std::vector<unsigned char> red(128 * 128 * 4, 0);
+            for (std::size_t i = 0; i < red.size(); i += 4) { red[i] = 255; red[i + 3] = 255; }
+            scene.uploadRGBA8(128, 128, red.data());
+
+            ember::RefractionSettings r = ember::Refraction::glass();
+            r.enabled = true;
+            r.sceneColorTex = scene.id();
+            setOpenGLRefraction(sys,r);
+            sys.setSpin(1.f);
+
+            ember::Emitter eg;
+            eg.shape = ember::Emitter::Shape::Sphere;
+            eg.rate = 1500.f;
+            eg.speedMin = 1.f; eg.speedMax = 1.f;
+            eg.lifeMin = eg.lifeMax = 2.f;
+            eg.sizeMin = eg.sizeMax = 0.15f;
+            eg.refractive = true;
+            sys.addEmitter(eg);
+            for (int i = 0; i < 5; ++i) sys.update(1.f / 60.f);
+
+            int neg = 0;
+            for (const auto& p : regression::particles(sys)) if (p.pos.w < 0.f) ++neg;
+            CHECK(neg > 0); // some particles are sign-encoded refractive
+
+            glViewport(0, 0, 128, 128);
+            glClearColor(0.f, 0.f, 0.f, 1.f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            sys.render(view, proj, 128.f, 128.f, 50.f);
+            glFinish();
+            std::vector<unsigned char> px(128 * 128 * 4);
+            glReadPixels(0, 0, 128, 128, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+            int redPx = 0;
+            for (std::size_t i = 0; i < px.size(); i += 4)
+                if (px[i] > 100 && px[i + 1] < 60 && px[i + 2] < 60) ++redPx;
+            CHECK(redPx > 0); // refracted scene content visible
+
+            // depth-aware mode with a depth texture must render without errors
+            ember::Texture depth;
+            depth.uploadDepth(128, 128);
+            std::vector<float> knownDepth(128 * 128, 0.99f);
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 128, 128, GL_DEPTH_COMPONENT, GL_FLOAT, knownDepth.data());
+            ember::RefractionSettings d = ember::Refraction::glass();
+            d.enabled = true;
+            d.mode = 1;
+            d.sceneColorTex = scene.id();
+            d.sceneDepthTex = depth.id();
+            setOpenGLRefraction(sys,d);
+            glClearColor(0.f, 0.f, 0.f, 1.f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            sys.render(view, proj, 128.f, 128.f, 50.f);
+            glFinish();
+            CHECK(countLit() > 0);
+
+            setOpenGLRefraction(sys,ember::RefractionSettings{}); // disable
+            sys.setSpin(0.f);
+        }
+
+        regression::glClean("legacy smoke tests");
+        regression::run(*win);
+        behavior::run([](const ember::ParticleSettings& s) { return ember::ParticleSystem(s); });
 
         if (g_failures == 0) {
             std::printf("single-header test: ALL PASSED\n");
@@ -146,7 +217,6 @@ int main() {
         return 1;
     } catch (const std::exception& e) {
         std::printf("FAIL: %s\n", e.what());
-        delete win;
         return 1;
     }
 }

@@ -1,11 +1,14 @@
 #version 430 core
 // Bright pass + 2x2 downsample to half resolution.
-in vec2 vUV;
-out vec4 frag;
+layout(location = 0) in vec2 vUV;
+layout(location = 0) out vec4 frag;
 
-uniform sampler2D uTex;
-uniform float uThreshold;
-uniform vec2  uTexel; // 1/source size
+layout(binding = 0) uniform sampler2D uTex;
+// CPU mirror: BloomParams in src/backends/opengl/params.hpp.
+layout(binding = 19, std140) uniform BloomParams {
+    vec2 uTexel; float uThreshold; float uBloomPad0; // uTexel = 1/source size
+    vec2 uDir;   vec2  uBloomPad1;
+};
 
 void main() {
     vec2 t = uTexel;

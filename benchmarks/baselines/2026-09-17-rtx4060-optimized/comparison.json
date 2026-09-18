@@ -1,0 +1,706 @@
+{
+  "before": "../2026-09-17-rtx4060/summary.json",
+  "after": "summary.json",
+  "metric": "completed_wall_ms_per_frame.mean",
+  "variants": {
+    "plain": [
+      {
+        "scenario": "bloom",
+        "capacity": 10000,
+        "before_ms": 0.2530738888888889,
+        "after_ms": 0.28896666666666665,
+        "speedup": 0.875789210597147
+      },
+      {
+        "scenario": "bloom",
+        "capacity": 100000,
+        "before_ms": 0.47604027777777774,
+        "after_ms": 0.5232644444444444,
+        "speedup": 0.9097508589241047
+      },
+      {
+        "scenario": "bloom",
+        "capacity": 1000000,
+        "before_ms": 3.292590138888889,
+        "after_ms": 3.3869423611111116,
+        "speedup": 0.9721423596381281
+      },
+      {
+        "scenario": "burst",
+        "capacity": 10000,
+        "before_ms": 0.09494305555555556,
+        "after_ms": 0.07975361111111111,
+        "speedup": 1.1904546293619587
+      },
+      {
+        "scenario": "burst",
+        "capacity": 100000,
+        "before_ms": 0.7843368055555556,
+        "after_ms": 0.13923611111111112,
+        "speedup": 5.633142144638405
+      },
+      {
+        "scenario": "burst",
+        "capacity": 1000000,
+        "before_ms": 16.64337375,
+        "after_ms": 0.5082245833333333,
+        "speedup": 32.748069054117316
+      },
+      {
+        "scenario": "churn",
+        "capacity": 10000,
+        "before_ms": 0.13991125,
+        "after_ms": 0.13389555555555555,
+        "speedup": 1.0449282608334856
+      },
+      {
+        "scenario": "churn",
+        "capacity": 100000,
+        "before_ms": 0.3724530555555556,
+        "after_ms": 0.2708644444444444,
+        "speedup": 1.3750533272075416
+      },
+      {
+        "scenario": "churn",
+        "capacity": 1000000,
+        "before_ms": 6.239797222222222,
+        "after_ms": 1.9333066666666667,
+        "speedup": 3.2275258394368658
+      },
+      {
+        "scenario": "dense",
+        "capacity": 10000,
+        "before_ms": 0.08212638888888889,
+        "after_ms": 0.10384458333333334,
+        "speedup": 0.7908586683358276
+      },
+      {
+        "scenario": "dense",
+        "capacity": 100000,
+        "before_ms": 0.22432013888888888,
+        "after_ms": 0.28088916666666663,
+        "speedup": 0.7986072996367686
+      },
+      {
+        "scenario": "dense",
+        "capacity": 1000000,
+        "before_ms": 1.9518154166666666,
+        "after_ms": 1.9906693055555555,
+        "speedup": 0.9804819972958564
+      },
+      {
+        "scenario": "forces",
+        "capacity": 10000,
+        "before_ms": 0.09043041666666667,
+        "after_ms": 0.11496680555555557,
+        "speedup": 0.7865784930674433
+      },
+      {
+        "scenario": "forces",
+        "capacity": 100000,
+        "before_ms": 0.22466791666666666,
+        "after_ms": 0.2489159722222222,
+        "speedup": 0.90258537714925
+      },
+      {
+        "scenario": "forces",
+        "capacity": 1000000,
+        "before_ms": 2.0059762500000002,
+        "after_ms": 1.8368845833333332,
+        "speedup": 1.092053506355757
+      },
+      {
+        "scenario": "refraction_depth",
+        "capacity": 10000,
+        "before_ms": 0.09377569444444445,
+        "after_ms": 0.14484819444444444,
+        "speedup": 0.6474067198705158
+      },
+      {
+        "scenario": "refraction_depth",
+        "capacity": 100000,
+        "before_ms": 0.29351791666666666,
+        "after_ms": 0.3455623611111111,
+        "speedup": 0.8493920336777933
+      },
+      {
+        "scenario": "refraction_depth",
+        "capacity": 1000000,
+        "before_ms": 2.5744277777777778,
+        "after_ms": 2.4002825,
+        "speedup": 1.072551992433298
+      },
+      {
+        "scenario": "refraction_noise",
+        "capacity": 10000,
+        "before_ms": 0.09109833333333334,
+        "after_ms": 0.15491458333333333,
+        "speedup": 0.5880552454981912
+      },
+      {
+        "scenario": "refraction_noise",
+        "capacity": 100000,
+        "before_ms": 0.28807625,
+        "after_ms": 0.3312979166666667,
+        "speedup": 0.8695383686636523
+      },
+      {
+        "scenario": "refraction_noise",
+        "capacity": 1000000,
+        "before_ms": 2.57962625,
+        "after_ms": 2.4101730555555556,
+        "speedup": 1.0703074802258896
+      },
+      {
+        "scenario": "refraction_simple",
+        "capacity": 10000,
+        "before_ms": 0.09904027777777778,
+        "after_ms": 0.14737,
+        "speedup": 0.6720518272224861
+      },
+      {
+        "scenario": "refraction_simple",
+        "capacity": 100000,
+        "before_ms": 0.28802319444444446,
+        "after_ms": 0.3349702777777777,
+        "speedup": 0.8598470179360858
+      },
+      {
+        "scenario": "refraction_simple",
+        "capacity": 1000000,
+        "before_ms": 2.5599456944444445,
+        "after_ms": 2.7024577777777776,
+        "speedup": 0.9472657502717692
+      },
+      {
+        "scenario": "sort",
+        "capacity": 10000,
+        "before_ms": 0.4357586111111111,
+        "after_ms": 0.20500166666666667,
+        "speedup": 2.1256344799364775
+      },
+      {
+        "scenario": "sort",
+        "capacity": 100000,
+        "before_ms": 1.3136866666666667,
+        "after_ms": 0.5602466666666667,
+        "speedup": 2.344836203101015
+      },
+      {
+        "scenario": "sort",
+        "capacity": 1000000,
+        "before_ms": 58.44588708333333,
+        "after_ms": 3.9521675,
+        "speedup": 14.788312257345705
+      },
+      {
+        "scenario": "sparse",
+        "capacity": 10000,
+        "before_ms": 0.07375916666666667,
+        "after_ms": 0.0896326388888889,
+        "speedup": 0.8229052227068823
+      },
+      {
+        "scenario": "sparse",
+        "capacity": 100000,
+        "before_ms": 0.09319972222222223,
+        "after_ms": 0.13399138888888887,
+        "speedup": 0.6955650135062578
+      },
+      {
+        "scenario": "sparse",
+        "capacity": 1000000,
+        "before_ms": 0.8110170833333333,
+        "after_ms": 0.08626513888888888,
+        "speedup": 9.401446444987917
+      },
+      {
+        "scenario": "sparse_control",
+        "capacity": 10000,
+        "before_ms": 0.06676763888888888,
+        "after_ms": 0.1088701388888889,
+        "speedup": 0.6132777965593564
+      },
+      {
+        "scenario": "sparse_control",
+        "capacity": 100000,
+        "before_ms": 0.07035555555555556,
+        "after_ms": 0.1233361111111111,
+        "speedup": 0.5704376027566948
+      },
+      {
+        "scenario": "sparse_control",
+        "capacity": 1000000,
+        "before_ms": 0.08041069444444444,
+        "after_ms": 0.09683263888888889,
+        "speedup": 0.8304089960484513
+      }
+    ],
+    "stages": [
+      {
+        "scenario": "bloom",
+        "capacity": 10000,
+        "before_ms": 0.2814506944444444,
+        "after_ms": 0.30585111111111113,
+        "speedup": 0.920221258709757
+      },
+      {
+        "scenario": "bloom",
+        "capacity": 100000,
+        "before_ms": 0.5051370833333334,
+        "after_ms": 0.5447204166666667,
+        "speedup": 0.927332752505299
+      },
+      {
+        "scenario": "bloom",
+        "capacity": 1000000,
+        "before_ms": 3.3276540277777777,
+        "after_ms": 3.3879651388888887,
+        "speedup": 0.9821984263005461
+      },
+      {
+        "scenario": "burst",
+        "capacity": 10000,
+        "before_ms": 0.11436861111111112,
+        "after_ms": 0.11112472222222221,
+        "speedup": 1.029191424050554
+      },
+      {
+        "scenario": "burst",
+        "capacity": 100000,
+        "before_ms": 0.8098044444444445,
+        "after_ms": 0.12645125,
+        "speedup": 6.40408413870519
+      },
+      {
+        "scenario": "burst",
+        "capacity": 1000000,
+        "before_ms": 16.692262916666667,
+        "after_ms": 0.5612881944444444,
+        "speedup": 29.739201860798882
+      },
+      {
+        "scenario": "churn",
+        "capacity": 10000,
+        "before_ms": 0.13982680555555554,
+        "after_ms": 0.17146333333333333,
+        "speedup": 0.815491002287499
+      },
+      {
+        "scenario": "churn",
+        "capacity": 100000,
+        "before_ms": 0.39639680555555556,
+        "after_ms": 0.2829918055555556,
+        "speedup": 1.4007359851899912
+      },
+      {
+        "scenario": "churn",
+        "capacity": 1000000,
+        "before_ms": 6.3234361111111115,
+        "after_ms": 2.0435790277777777,
+        "speedup": 3.0942948744132117
+      },
+      {
+        "scenario": "dense",
+        "capacity": 10000,
+        "before_ms": 0.09836416666666666,
+        "after_ms": 0.15795847222222223,
+        "speedup": 0.622721689332903
+      },
+      {
+        "scenario": "dense",
+        "capacity": 100000,
+        "before_ms": 0.23977597222222222,
+        "after_ms": 0.24813305555555557,
+        "speedup": 0.9663201530540849
+      },
+      {
+        "scenario": "dense",
+        "capacity": 1000000,
+        "before_ms": 1.9789329166666667,
+        "after_ms": 1.9774793055555557,
+        "speedup": 1.0007350828436117
+      },
+      {
+        "scenario": "forces",
+        "capacity": 10000,
+        "before_ms": 0.10381180555555554,
+        "after_ms": 0.1715351388888889,
+        "speedup": 0.6051926516513865
+      },
+      {
+        "scenario": "forces",
+        "capacity": 100000,
+        "before_ms": 0.2441175,
+        "after_ms": 0.2724930555555556,
+        "speedup": 0.8958668671474806
+      },
+      {
+        "scenario": "forces",
+        "capacity": 1000000,
+        "before_ms": 2.06909625,
+        "after_ms": 2.092758888888889,
+        "speedup": 0.9886930888147117
+      },
+      {
+        "scenario": "refraction_depth",
+        "capacity": 10000,
+        "before_ms": 0.11647805555555557,
+        "after_ms": 0.16572319444444444,
+        "speedup": 0.7028470332473746
+      },
+      {
+        "scenario": "refraction_depth",
+        "capacity": 100000,
+        "before_ms": 0.30685805555555556,
+        "after_ms": 0.33634861111111114,
+        "speedup": 0.912321458803903
+      },
+      {
+        "scenario": "refraction_depth",
+        "capacity": 1000000,
+        "before_ms": 2.6073584722222223,
+        "after_ms": 2.65913,
+        "speedup": 0.9805306518380906
+      },
+      {
+        "scenario": "refraction_noise",
+        "capacity": 10000,
+        "before_ms": 0.12065152777777777,
+        "after_ms": 0.18682597222222222,
+        "speedup": 0.6457963330401807
+      },
+      {
+        "scenario": "refraction_noise",
+        "capacity": 100000,
+        "before_ms": 0.3121669444444444,
+        "after_ms": 0.33509847222222217,
+        "speedup": 0.931567793712379
+      },
+      {
+        "scenario": "refraction_noise",
+        "capacity": 1000000,
+        "before_ms": 2.5859106944444443,
+        "after_ms": 2.65906875,
+        "speedup": 0.972487339578732
+      },
+      {
+        "scenario": "refraction_simple",
+        "capacity": 10000,
+        "before_ms": 0.11497930555555556,
+        "after_ms": 0.14063416666666667,
+        "speedup": 0.8175773233547245
+      },
+      {
+        "scenario": "refraction_simple",
+        "capacity": 100000,
+        "before_ms": 0.3113881944444445,
+        "after_ms": 0.3314061111111111,
+        "speedup": 0.9395970201045714
+      },
+      {
+        "scenario": "refraction_simple",
+        "capacity": 1000000,
+        "before_ms": 2.5572708333333334,
+        "after_ms": 2.5957231944444445,
+        "speedup": 0.9851862628521371
+      },
+      {
+        "scenario": "sort",
+        "capacity": 10000,
+        "before_ms": 0.4524741666666667,
+        "after_ms": 0.2989934722222222,
+        "speedup": 1.5133245662646853
+      },
+      {
+        "scenario": "sort",
+        "capacity": 100000,
+        "before_ms": 1.3286484722222223,
+        "after_ms": 0.5597672222222222,
+        "speedup": 2.3735731916342213
+      },
+      {
+        "scenario": "sort",
+        "capacity": 1000000,
+        "before_ms": 58.584855000000005,
+        "after_ms": 4.1638955555555555,
+        "speedup": 14.069722503446293
+      },
+      {
+        "scenario": "sparse",
+        "capacity": 10000,
+        "before_ms": 0.09467527777777777,
+        "after_ms": 0.14847402777777777,
+        "speedup": 0.6376554822064839
+      },
+      {
+        "scenario": "sparse",
+        "capacity": 100000,
+        "before_ms": 0.11854013888888888,
+        "after_ms": 0.11799750000000002,
+        "speedup": 1.004598732082365
+      },
+      {
+        "scenario": "sparse",
+        "capacity": 1000000,
+        "before_ms": 0.8529619444444444,
+        "after_ms": 0.12112138888888889,
+        "speedup": 7.042207427351348
+      },
+      {
+        "scenario": "sparse_control",
+        "capacity": 10000,
+        "before_ms": 0.09575291666666667,
+        "after_ms": 0.16796708333333332,
+        "speedup": 0.5700695324728804
+      },
+      {
+        "scenario": "sparse_control",
+        "capacity": 100000,
+        "before_ms": 0.10235097222222223,
+        "after_ms": 0.11783069444444444,
+        "speedup": 0.868627420934698
+      },
+      {
+        "scenario": "sparse_control",
+        "capacity": 1000000,
+        "before_ms": 0.10074833333333333,
+        "after_ms": 0.13443583333333334,
+        "speedup": 0.7494157683653291
+      }
+    ],
+    "plain_no_timers": [
+      {
+        "scenario": "bloom",
+        "capacity": 10000,
+        "before_ms": 0.228245,
+        "after_ms": 0.24098333333333333,
+        "speedup": 0.9471401895013487
+      },
+      {
+        "scenario": "bloom",
+        "capacity": 100000,
+        "before_ms": 0.45381791666666665,
+        "after_ms": 0.4623172222222222,
+        "speedup": 0.9816158577984573
+      },
+      {
+        "scenario": "bloom",
+        "capacity": 1000000,
+        "before_ms": 3.2872299999999997,
+        "after_ms": 3.1686268055555558,
+        "speedup": 1.0374304712175308
+      },
+      {
+        "scenario": "burst",
+        "capacity": 10000,
+        "before_ms": 0.07888555555555556,
+        "after_ms": 0.05571986111111111,
+        "speedup": 1.4157529107664084
+      },
+      {
+        "scenario": "burst",
+        "capacity": 100000,
+        "before_ms": 0.7676388888888889,
+        "after_ms": 0.08148222222222222,
+        "speedup": 9.42093708239016
+      },
+      {
+        "scenario": "burst",
+        "capacity": 1000000,
+        "before_ms": 16.698563611111112,
+        "after_ms": 0.4806333333333333,
+        "speedup": 34.74283295189218
+      },
+      {
+        "scenario": "churn",
+        "capacity": 10000,
+        "before_ms": 0.10160833333333334,
+        "after_ms": 0.08526152777777778,
+        "speedup": 1.191725459085852
+      },
+      {
+        "scenario": "churn",
+        "capacity": 100000,
+        "before_ms": 0.33639749999999996,
+        "after_ms": 0.21199444444444446,
+        "speedup": 1.5868222437694905
+      },
+      {
+        "scenario": "churn",
+        "capacity": 1000000,
+        "before_ms": 6.24782625,
+        "after_ms": 1.949169861111111,
+        "speedup": 3.205378030234096
+      },
+      {
+        "scenario": "dense",
+        "capacity": 10000,
+        "before_ms": 0.07159319444444445,
+        "after_ms": 0.07090513888888889,
+        "speedup": 1.0097038884111598
+      },
+      {
+        "scenario": "dense",
+        "capacity": 100000,
+        "before_ms": 0.19195027777777776,
+        "after_ms": 0.18894569444444445,
+        "speedup": 1.0159018354039115
+      },
+      {
+        "scenario": "dense",
+        "capacity": 1000000,
+        "before_ms": 1.9145913888888888,
+        "after_ms": 1.782704027777778,
+        "speedup": 1.073981636354698
+      },
+      {
+        "scenario": "forces",
+        "capacity": 10000,
+        "before_ms": 0.06913138888888888,
+        "after_ms": 0.08129930555555555,
+        "speedup": 0.8503318499030502
+      },
+      {
+        "scenario": "forces",
+        "capacity": 100000,
+        "before_ms": 0.1993848611111111,
+        "after_ms": 0.2014558333333333,
+        "speedup": 0.9897199689482531
+      },
+      {
+        "scenario": "forces",
+        "capacity": 1000000,
+        "before_ms": 1.968747638888889,
+        "after_ms": 1.897643888888889,
+        "speedup": 1.0374694906754254
+      },
+      {
+        "scenario": "refraction_depth",
+        "capacity": 10000,
+        "before_ms": 0.09871444444444444,
+        "after_ms": 0.09789416666666667,
+        "speedup": 1.008379230404717
+      },
+      {
+        "scenario": "refraction_depth",
+        "capacity": 100000,
+        "before_ms": 0.2596115277777778,
+        "after_ms": 0.2627936111111111,
+        "speedup": 0.9878913215588491
+      },
+      {
+        "scenario": "refraction_depth",
+        "capacity": 1000000,
+        "before_ms": 2.5594805555555555,
+        "after_ms": 2.3755509722222223,
+        "speedup": 1.077426073144318
+      },
+      {
+        "scenario": "refraction_noise",
+        "capacity": 10000,
+        "before_ms": 0.08792,
+        "after_ms": 0.08627472222222222,
+        "speedup": 1.0190702181983264
+      },
+      {
+        "scenario": "refraction_noise",
+        "capacity": 100000,
+        "before_ms": 0.25246680555555556,
+        "after_ms": 0.2499384722222222,
+        "speedup": 1.0101158229497593
+      },
+      {
+        "scenario": "refraction_noise",
+        "capacity": 1000000,
+        "before_ms": 2.5237036111111113,
+        "after_ms": 2.3888991666666666,
+        "speedup": 1.056429524663673
+      },
+      {
+        "scenario": "refraction_simple",
+        "capacity": 10000,
+        "before_ms": 0.08027444444444444,
+        "after_ms": 0.08843208333333334,
+        "speedup": 0.9077524968156666
+      },
+      {
+        "scenario": "refraction_simple",
+        "capacity": 100000,
+        "before_ms": 0.2710033333333333,
+        "after_ms": 0.2656213888888889,
+        "speedup": 1.0202617133618548
+      },
+      {
+        "scenario": "refraction_simple",
+        "capacity": 1000000,
+        "before_ms": 2.5144897222222222,
+        "after_ms": 2.491135416666667,
+        "speedup": 1.0093749642830758
+      },
+      {
+        "scenario": "sort",
+        "capacity": 10000,
+        "before_ms": 0.42929749999999994,
+        "after_ms": 0.17908180555555556,
+        "speedup": 2.397214494617218
+      },
+      {
+        "scenario": "sort",
+        "capacity": 100000,
+        "before_ms": 1.3193915277777777,
+        "after_ms": 0.5279584722222223,
+        "speedup": 2.49904414304471
+      },
+      {
+        "scenario": "sort",
+        "capacity": 1000000,
+        "before_ms": 58.679808611111106,
+        "after_ms": 3.9530856944444444,
+        "speedup": 14.844051747620362
+      },
+      {
+        "scenario": "sparse",
+        "capacity": 10000,
+        "before_ms": 0.05426305555555555,
+        "after_ms": 0.06543666666666667,
+        "speedup": 0.8292454111694088
+      },
+      {
+        "scenario": "sparse",
+        "capacity": 100000,
+        "before_ms": 0.08557027777777777,
+        "after_ms": 0.06573944444444445,
+        "speedup": 1.3016580608631718
+      },
+      {
+        "scenario": "sparse",
+        "capacity": 1000000,
+        "before_ms": 0.7809849999999999,
+        "after_ms": 0.08711069444444446,
+        "speedup": 8.96543191373683
+      },
+      {
+        "scenario": "sparse_control",
+        "capacity": 10000,
+        "before_ms": 0.05701194444444444,
+        "after_ms": 0.05889694444444444,
+        "speedup": 0.967994944087837
+      },
+      {
+        "scenario": "sparse_control",
+        "capacity": 100000,
+        "before_ms": 0.05576763888888889,
+        "after_ms": 0.056834444444444444,
+        "speedup": 0.9812295947293308
+      },
+      {
+        "scenario": "sparse_control",
+        "capacity": 1000000,
+        "before_ms": 0.07080986111111111,
+        "after_ms": 0.07812347222222223,
+        "speedup": 0.9063839470638536
+      }
+    ]
+  }
+}

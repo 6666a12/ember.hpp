@@ -1,4 +1,4 @@
-#include "ember/shader.hpp"
+#include "ember/backends/opengl/shader.hpp"
 
 #include <glm/gtc/type_ptr.hpp>
 
@@ -14,12 +14,24 @@ std::string readFile(const char* path) {
     std::ifstream f(path, std::ios::binary);
     if (!f) throw std::runtime_error(std::string("ember: cannot open shader file: ") + path);
     std::ostringstream ss;
-    ss << f.rdbuf();
+    char buffer[4096];
+    while (f.read(buffer, sizeof(buffer))) ss.write(buffer, f.gcount());
+    ss.write(buffer, f.gcount());
+    if (f.bad() || !f.eof() || !ss)
+        throw std::runtime_error(std::string("ember: cannot read shader file: ") + path);
     return ss.str();
 }
 
+struct StageOwner {
+    GLuint id;
+    ~StageOwner() { if (id) glDeleteShader(id); }
+    GLuint release() { GLuint result = id; id = 0; return result; }
+};
+
 GLuint compileStage(GLenum stage, const char* src) {
-    GLuint s = glCreateShader(stage);
+    StageOwner owner{glCreateShader(stage)};
+    GLuint s = owner.id;
+    if (!s) throw std::runtime_error("ember: cannot create shader");
     glShaderSource(s, 1, &src, nullptr);
     glCompileShader(s);
     GLint ok = 0;
@@ -29,10 +41,9 @@ GLuint compileStage(GLenum stage, const char* src) {
         GLsizei len = 0;
         glGetShaderInfoLog(s, sizeof(log), &len, log);
         std::string msg(log, len);
-        glDeleteShader(s);
         throw std::runtime_error("ember: shader compile error: " + msg);
     }
-    return s;
+    return owner.release();
 }
 
 } // namespace
@@ -41,7 +52,8 @@ Shader::~Shader() {
     if (id_) glDeleteProgram(id_);
 }
 
-Shader::Shader(Shader&& o) noexcept : id_(o.id_), locs_(std::move(o.locs_)) { o.id_ = 0; }
+Shader::Shader(Shader&& o) noexcept : id_(o.id_), locs_(std::move(o.locs_)),
+                                      uniforms_(std::move(o.uniforms_)) { o.id_ = 0; }
 
 Shader& Shader::operator=(Shader&& o) noexcept {
     if (this != &o) {
@@ -49,6 +61,7 @@ Shader& Shader::operator=(Shader&& o) noexcept {
         id_ = o.id_;
         o.id_ = 0;
         locs_ = std::move(o.locs_);
+        uniforms_ = std::move(o.uniforms_);
     }
     return *this;
 }
@@ -58,9 +71,9 @@ Shader Shader::fromSources(const std::vector<std::pair<GLenum, const char*>>& st
     std::vector<GLuint> shaders;
     try {
         for (const auto& [stage, src] : stages) {
-            GLuint s = compileStage(stage, src);
-            shaders.push_back(s);
-            glAttachShader(prog, s);
+            StageOwner shader{compileStage(stage, src)};
+            shaders.push_back(shader.id);
+            glAttachShader(prog, shader.release());
         }
         glLinkProgram(prog);
         GLint ok = 0;
@@ -109,6 +122,17 @@ GLint Shader::location(const char* name) const {
     GLint l = glGetUniformLocation(id_, name);
     locs_.emplace(std::move(key), l);
     return l;
+}
+
+bool Shader::hasUniform(const char* name) const {
+    std::string key(name);
+    auto it = uniforms_.find(key);
+    if (it != uniforms_.end()) return it->second;
+    // Program-interface query sees std140 block members too (blocks declared
+    // without an instance name expose plain member names).
+    const bool found = glGetProgramResourceIndex(id_, GL_UNIFORM, name) != GL_INVALID_INDEX;
+    uniforms_.emplace(std::move(key), found);
+    return found;
 }
 
 void Shader::setInt(const char* n, int v)   { glUniform1i(location(n), v); }

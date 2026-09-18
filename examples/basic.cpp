@@ -37,6 +37,10 @@ struct GroundDepth {
     Texture depthTex;
     GLuint fbo = 0;
     GLuint colorRb = 0; // dummy color attachment: some drivers reject depth-only FBOs
+    ~GroundDepth() {
+        if (fbo) glDeleteFramebuffers(1, &fbo);
+        if (colorRb) glDeleteRenderbuffers(1, &colorRb);
+    }
     int w = 0, h = 0;
 
     void init() {
@@ -63,6 +67,7 @@ struct GroundDepth {
 
     void resize(int ww, int hh) {
         if (ww == w && hh == h) return;
+        if (ww <= 0 || hh <= 0) return; // minimized / hidden
         w = ww;
         h = hh;
         depthTex.uploadDepth(w, h);
@@ -72,8 +77,10 @@ struct GroundDepth {
         glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, colorRb);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthTex.id(), 0);
         const GLenum st = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-        if (st != GL_FRAMEBUFFER_COMPLETE)
-            std::fprintf(stderr, "[basic] ground FBO incomplete: 0x%X\n", st);
+        if (st != GL_FRAMEBUFFER_COMPLETE) {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            throw std::runtime_error("ember: ground framebuffer incomplete");
+        }
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glBindRenderbuffer(GL_RENDERBUFFER, 0);
     }
@@ -124,8 +131,9 @@ int main(int argc, char** argv) {
         Config cfg;
         ember_example::EmitterEditor editor;
         try {
-            cfg = Config::fromFile(cfgPath.c_str());
-            sys.apply(cfg);
+            Config candidate = Config::fromFile(cfgPath.c_str());
+            sys.apply(candidate);
+            cfg = std::move(candidate);
             editor.enabled = cfg.system.editor;
             std::printf("[basic] loaded config: %s\n", cfgPath.c_str());
         } catch (const std::exception& e) {
@@ -138,8 +146,7 @@ int main(int argc, char** argv) {
         // Soft particles: host provides a depth texture (ground plane).
         GroundDepth ground;
         ground.init();
-        sys.setSoftParticles(true, ground.depthTex.id(), 0.6f);
-        double lastVpLog = 0.0;
+        setOpenGLSoftParticles(sys,cfg.system.softParticles, ground.depthTex.id(), cfg.system.softRadius);
 
         glm::vec2 lastCursor = win.cursor();
         bool reload = false;
@@ -156,13 +163,20 @@ int main(int argc, char** argv) {
 
         while (!win.shouldClose()) {
             win.pollEvents();
-            const float dt = std::min(win.deltaTime(), 0.05f);
+            const float elapsed = win.deltaTime();
+            const float dt = std::min(elapsed, 0.05f);
+            const glm::ivec2 vp = win.framebufferSize();
+            const glm::ivec2 windowSize = win.size();
+            if (vp.x <= 0 || vp.y <= 0 || windowSize.x <= 0 || windowSize.y <= 0) continue;
             if (win.key(GLFW_KEY_ESCAPE)) break;
 
             if (reload) {
                 reload = false;
                 try {
-                    sys.loadConfig(cfgPath.c_str());
+                    Config candidate = Config::fromFile(cfgPath.c_str());
+                    sys.apply(candidate);
+                    cfg = std::move(candidate);
+                    if (cfg.has("system.editor")) editor.enabled = cfg.system.editor;
                     std::printf("[basic] config reloaded\n");
                 } catch (const std::exception& e) {
                     std::fprintf(stderr, "[basic] reload failed, keeping previous config: %s\n", e.what());
@@ -177,19 +191,14 @@ int main(int argc, char** argv) {
             editor.update(sys, win, cam, dt);
 
             // Mouse position on the interaction plane -> attractor + trail emitter.
-            const glm::ivec2 vp = win.framebufferSize();
-            if (win.time() - lastVpLog > 1.0) {
-                std::fprintf(stderr, "[basic] vp=%dx%d size=%dx%d\n", vp.x, vp.y,
-                             win.size().x, win.size().y);
-                lastVpLog = win.time();
-            }
             const float aspect = vp.y > 0 ? (float)vp.x / (float)vp.y : 1.f;
-            const glm::vec2 ndc(cur.x / (float)vp.x * 2.f - 1.f, 1.f - cur.y / (float)vp.y * 2.f);
-            const glm::vec3 mouse = ember_example::rayPlanePoint(cam, ndc, aspect, 0.6f);
-
-            attractors[0].position = mouse;
-            sys.setAttractors(attractors);
-            if (auto* trail = sys.emitter(1)) trail->position = mouse;
+            const glm::vec2 ndc(cur.x / (float)windowSize.x * 2.f - 1.f, 1.f - cur.y / (float)windowSize.y * 2.f);
+            glm::vec3 mouse;
+            if (ember_example::rayPlanePoint(cam, ndc, aspect, 0.6f, mouse)) {
+                attractors[0].position = mouse;
+                sys.setAttractors(attractors);
+                if (auto* trail = sys.emitter(1)) trail->position = mouse;
+            }
 
             sys.update(dt);
 
@@ -208,7 +217,7 @@ int main(int argc, char** argv) {
 
             win.swapBuffers();
 
-            fpsAccum += dt;
+            fpsAccum += elapsed;
             ++fpsFrames;
             if (fpsAccum > 0.5) {
                 char title[160];

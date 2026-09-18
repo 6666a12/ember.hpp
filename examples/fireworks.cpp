@@ -50,8 +50,9 @@ int main(int argc, char** argv) {
         std::string cfgPath = pickConfig(argc, argv);
         Config cfg;
         try {
-            cfg = Config::fromFile(cfgPath.c_str());
-            sys.apply(cfg);
+            Config candidate = Config::fromFile(cfgPath.c_str());
+            sys.apply(candidate);
+            cfg = std::move(candidate);
             std::printf("[fireworks] loaded config: %s (%zu palettes)\n", cfgPath.c_str(), cfg.palettes.size());
         } catch (const std::exception& e) {
             std::fprintf(stderr, "[fireworks] warning: %s (running with defaults)\n", e.what());
@@ -70,14 +71,19 @@ int main(int argc, char** argv) {
 
         while (!win.shouldClose()) {
             win.pollEvents();
-            const float dt = std::min(win.deltaTime(), 0.05f);
+            const float elapsed = win.deltaTime();
+            const float dt = std::min(elapsed, 0.05f);
+            const glm::ivec2 vp = win.framebufferSize();
+            const glm::ivec2 windowSize = win.size();
+            if (vp.x <= 0 || vp.y <= 0 || windowSize.x <= 0 || windowSize.y <= 0) continue;
             if (win.key(GLFW_KEY_ESCAPE)) break;
 
             if (reload) {
                 reload = false;
                 try {
-                    cfg = Config::fromFile(cfgPath.c_str());
-                    sys.apply(cfg);
+                    Config candidate = Config::fromFile(cfgPath.c_str());
+                    sys.apply(candidate);
+                    cfg = std::move(candidate);
                     std::printf("[fireworks] config reloaded (%zu palettes)\n", cfg.palettes.size());
                 } catch (const std::exception& e) {
                     std::fprintf(stderr, "[fireworks] reload failed, keeping previous config: %s\n", e.what());
@@ -117,7 +123,6 @@ int main(int argc, char** argv) {
 
             sys.update(dt);
 
-            const glm::ivec2 vp = win.framebufferSize();
             const float aspect = vp.y > 0 ? (float)vp.x / (float)vp.y : 1.f;
             glViewport(0, 0, vp.x, vp.y);
             glClearColor(0.008f, 0.01f, 0.03f, 1.f);
@@ -126,7 +131,7 @@ int main(int argc, char** argv) {
 
             win.swapBuffers();
 
-            fpsAccum += dt;
+            fpsAccum += elapsed;
             ++fpsFrames;
             if (fpsAccum > 0.5) {
                 char title[160];

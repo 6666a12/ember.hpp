@@ -1,0 +1,10 @@
+plain dense 10000 repeat 1
+plain churn 10000 repeat 1
+plain burst 10000 repeat 1
+plain sparse 10000 repeat 1
+plain sort 10000 repeat 1
+plain dense 1000000 repeat 1
+plain churn 1000000 repeat 1
+plain burst 1000000 repeat 1
+plain sparse 1000000 repeat 1
+plain sort 1000000 repeat 1

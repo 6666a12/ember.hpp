@@ -8,7 +8,7 @@ Usage:
 
 The generated file keeps the documented external dependencies (glad, glm,
 GLFW/stb_image optional) — see the header banner and the INTEGRATION docs.
-Run after any change to include/ember/*.hpp or src/*.cpp.
+Run after changes under include/ember/ or src/, including backend subdirectories.
 """
 import os
 import re
@@ -21,40 +21,25 @@ OUT = os.path.join(ROOT, "single_header", "ember.hpp")
 # Section order (dependency order) + one-line descriptions for the banner TOC.
 # ---------------------------------------------------------------------------
 DECL_ORDER = [
-    "gl.hpp",               # must come first (GL types/helpers for everything else)
-    "core.hpp",
-    "emitters.hpp",
-    "gpu.hpp",
-    "shader.hpp",
-    "config.hpp",
-    "particle_system.hpp",
-    # glfw_window.hpp is appended under #ifdef EMBER_USE_GLFW
+    "core.hpp", "emitters.hpp", "particle_types.hpp", "backend.hpp",
+    "system.hpp", "config.hpp", "backends/opengl/gl.hpp",
+    "backends/opengl/gpu.hpp", "backends/opengl/shader.hpp", "opengl.hpp",
 ]
-
-DECL_DESC = {
-    "gl.hpp":               "GL loading + error helpers (glad required)",
-    "core.hpp":             "Particle, force types, Rng",
-    "emitters.hpp":         "Emitter + SpawnRequest (GPU spawn requests)",
-    "gpu.hpp":              "Buffer / Texture / VertexArray RAII wrappers",
-    "shader.hpp":           "Shader — uniform-cached GL program",
-    "config.hpp":           "INI-style Config parser (loadConfig/apply)",
-    "particle_system.hpp":  "ParticleSystem — GPU simulation + rendering",
-    "glfw_window.hpp":      "GLFW convenience window (EMBER_USE_GLFW)",
-}
-
+DECL_DESC = {name: name for name in DECL_ORDER}
+DECL_DESC["glfw_window.hpp"] = "GLFW convenience window"
 IMPL_ORDER = [
-    "shader.cpp",
-    "particle_system.cpp",  # preceded by the conditional stb_image include
-    # glfw_window.cpp is appended under #ifdef EMBER_USE_GLFW
+    "backends/opengl/particle_backend.hpp", "backends/opengl/params.hpp",
+    "backends/opengl/common.hpp",
+    "particle_system.cpp", "backends/opengl/shader.cpp",
+    "backends/opengl/shaders.cpp", "backends/opengl/resources.cpp",
+    "backends/opengl/statistics.cpp", "backends/opengl/simulation.cpp",
+    "backends/opengl/render.cpp", "backends/opengl/sort.cpp",
+    "backends/opengl/compat.cpp",
 ]
+IMPL_DESC = {name: name for name in IMPL_ORDER}
+IMPL_DESC["glfw_window.cpp"] = "GLFW window wrapper"
 
-IMPL_DESC = {
-    "shader.cpp":           "Shader implementation",
-    "particle_system.cpp":  "ParticleSystem + embedded shader sources",
-    "glfw_window.cpp":      "GLFW window wrapper (EMBER_USE_GLFW)",
-}
-
-INTERNAL_INCLUDE = re.compile(r'^\s*#\s*include\s+"ember/[^"]+"\s*$')
+INTERNAL_INCLUDE = re.compile(r'^\s*#\s*include\s+"(?:ember/[^"]+|common\.hpp|particle_backend\.hpp|params\.hpp)"\s*$')
 STB_INCLUDE = re.compile(r'^\s*#\s*include\s+"stb_image\.h"\s*$')
 EXTERNAL_INCLUDE = re.compile(r'^\s*#\s*include\s*<[^>]+>\s*$')
 
@@ -65,19 +50,9 @@ BANNER = r"""/* ================================================================
  *     python tools/amalgamate.py           (--verify checks for drift)
  * ============================================================================
  * CONTENTS
- *   SECTION A — DECLARATIONS (types, classes, inline helpers)
- *     [ 1] ember/gl.hpp            GL loading + error helpers (needs glad)
- *     [ 2] ember/core.hpp          Particle, force types, Rng
- *     [ 3] ember/emitters.hpp      Emitter + SpawnRequest (GPU spawn requests)
- *     [ 4] ember/gpu.hpp           Buffer / Texture / VertexArray RAII
- *     [ 5] ember/shader.hpp        Shader — uniform-cached GL program
- *     [ 6] ember/config.hpp        INI-style Config parser (loadConfig/apply)
- *     [ 7] ember/particle_system.hpp  ParticleSystem (simulation + rendering)
- *     [ 8] ember/glfw_window.hpp   [EMBER_USE_GLFW] GLFW convenience window
- *   SECTION B — IMPLEMENTATION (compile ONCE, see below)
- *     [ 9] src/shader.cpp
- *     [10] src/particle_system.cpp
- *     [11] src/glfw_window.cpp     [EMBER_USE_GLFW]
+ *   Public CPU data, backend contract and ParticleSystem facade
+ *   OpenGL resources, shaders, simulation, statistics and rendering
+ *   Optional GLFW convenience module
  * ============================================================================
  * QUICK START — in exactly ONE translation unit:
  *
@@ -124,10 +99,9 @@ IMPL_HEADER = r"""
  * ==========================================================================*/
 """
 
-BAR = " * ========================================================================== */"
 
 
-def banner_for(num, tag, name, desc):
+def banner_for(num, name, desc):
     return ("/* ============================================================================\n"
             " * [%2d] %s\n"
             " * %s\n"
@@ -136,7 +110,7 @@ def banner_for(num, tag, name, desc):
 
 
 def read(name):
-    subdir = "include/ember" if name.endswith(".hpp") else "src"
+    subdir = "include/ember" if name in DECL_ORDER or name == "glfw_window.hpp" else "src"
     with open(os.path.join(ROOT, subdir, name), "r", encoding="utf-8") as f:
         return f.read()
 
@@ -159,7 +133,7 @@ def tidy(text):
     return "\n".join(out)
 
 
-def strip(name, text, seen):
+def strip(text, seen):
     """Remove single-header-internal directives; dedupe repeated external
     includes (first occurrence wins, in place)."""
     out = []
@@ -188,14 +162,14 @@ def build():
     num = 0
     for name in DECL_ORDER:
         num += 1
-        lines.append(banner_for(num, name, name, DECL_DESC[name]))
-        lines.append(strip(name, read(name), seen))
+        lines.append(banner_for(num, name, DECL_DESC[name]))
+        lines.append(strip(read(name), seen))
 
     glfw_h = read("glfw_window.hpp")
     num += 1
     lines.append("\n#ifdef EMBER_USE_GLFW\n")
-    lines.append(banner_for(num, "glfw_window.hpp", "glfw_window.hpp", DECL_DESC["glfw_window.hpp"]))
-    lines.append(strip("glfw_window.hpp", glfw_h, seen))  # its GLFW include stays in place
+    lines.append(banner_for(num, "glfw_window.hpp", DECL_DESC["glfw_window.hpp"]))
+    lines.append(strip(glfw_h, seen))  # its GLFW include stays in place
     lines.append("\n#endif // EMBER_USE_GLFW\n")
     lines.append("\n#endif // EMBER_SINGLE_HEADER_HPP\n")
 
@@ -206,21 +180,22 @@ def build():
     seen = set()
     for name in IMPL_ORDER:
         num += 1
-        body = strip(name, read(name), seen)
-        if name == "particle_system.cpp":
+        body = strip(read(name), seen)
+        if name == "backends/opengl/resources.cpp":
             body = ("#ifdef EMBER_USE_STB\n"
                     "#include \"stb_image.h\"\n"
                     "#endif // EMBER_USE_STB\n\n") + body
-        lines.append(banner_for(num, name, name, IMPL_DESC[name]))
+        lines.append(banner_for(num, name, IMPL_DESC[name]))
         lines.append(body)
 
     glfw_cpp = read("glfw_window.cpp")
     num += 1
     lines.append("\n#ifdef EMBER_USE_GLFW\n")
-    lines.append(banner_for(num, "glfw_window.cpp", "glfw_window.cpp", IMPL_DESC["glfw_window.cpp"]))
-    lines.append(strip("glfw_window.cpp", glfw_cpp, seen))
+    lines.append(banner_for(num, "glfw_window.cpp", IMPL_DESC["glfw_window.cpp"]))
+    lines.append(strip(glfw_cpp, seen))
     lines.append("\n#endif // EMBER_USE_GLFW\n")
     lines.append("\n#endif // EMBER_SINGLE_HEADER_IMPLEMENTATION\n#endif // EMBER_IMPLEMENTATION\n")
+    lines.append("\n#undef EMBER_BENCH_BEGIN\n#undef EMBER_BENCH_END\n")
     return tidy("\n".join(lines))
 
 

@@ -39,7 +39,7 @@ public:
 
     void zoom(float scrollY) {
         if (scrollY == 0.f) return; // no wheel motion (examples call this every frame)
-        distance = glm::clamp(distance * (scrollY > 0.f ? 0.88f : 1.14f), 0.5f, 300.f);
+        distance = glm::clamp(distance * std::pow(0.88f, scrollY), 0.5f, 300.f);
     }
 };
 

@@ -16,7 +16,7 @@ int g_failures = 0;
     do {                                                                       \
         if (!(cond)) {                                                         \
             std::printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #cond);        \
-            ++g_failures;                                                      \
+            throw std::runtime_error(#cond);                                                      \
         }                                                                      \
     } while (0)
 
@@ -40,7 +40,7 @@ bool vecEq(const glm::vec4& a, const glm::vec4& b, float eps = 1e-5f) {
 
 } // namespace
 
-int main(int argc, char** argv) {
+int runConfigTests(int argc, char** argv) {
     const std::string dir = argc > 1 ? argv[1] : ".";
 
     // ---- parse config/example.ini ------------------------------------------
@@ -337,7 +337,8 @@ int main(int argc, char** argv) {
         // without fade config, life.yzw mirrors the spawn color (identity fade)
         em.hasFadeColor = false;
         out.clear();
-        em.spawn(out, 10000, 0.1f, rng);
+        const auto count = em.spawn(out, 10000, 0.1f, rng);
+        CHECK(count > 0 && out.size() == count);
         for (const auto& p : out) {
             CHECK(std::abs(p.life.y - p.color.r) < 1e-5f);
             CHECK(std::abs(p.life.z - p.color.g) < 1e-5f);
@@ -354,10 +355,96 @@ int main(int argc, char** argv) {
         CHECK(b.spread == 1.f);
     }
 
+    // ---- new keys: spin / refraction / emitter refractive -----------------------
+    {
+        const auto cfg=ember::Config::fromString("[system]\ntexture=\n");
+        CHECK(cfg.has("system.texture") && cfg.system.texture.empty());
+        CHECK_THROWS(ember::Config::fromString("[system]\ndrag=\n"));
+    }
+    {
+        ember::Config cfg = ember::Config::fromString(
+            "[system]\nspin = 1.5\nrefraction = true\nrefraction_mode = depth\nrefraction_strength = 0.03\n"
+            "[emitter \"e\"]\nrefractive = true\n");
+        CHECK(cfg.system.spin == 1.5f);
+        CHECK(cfg.system.refraction);
+        CHECK(cfg.system.refractionMode == "depth");
+        CHECK(cfg.system.refractionStrength == 0.03f);
+        CHECK(cfg.emitters.size() == 1);
+        CHECK(cfg.emitters[0].refractive);
+        CHECK_THROWS(ember::Config::fromString("[system]\nrefraction = maybe\n"));
+    }
+
+    // ---- event templates in INI -------------------------------------------------
+    {
+        ember::Config cfg = ember::Config::fromString(
+            "[event \"spark\"]\ncount = 6\ninherit = 0.5\n"
+            "[event \"shell\"]\non_death = spark\n"
+            "[emitter \"bomb\"]\non_death = shell\non_bounce = spark\n");
+        CHECK(cfg.events.size() == 2);
+        CHECK(cfg.events[0].name == "spark" && cfg.events[0].eventCount == 6);
+        CHECK(cfg.events[0].inheritVelocity == 0.5f);
+        CHECK(cfg.events[1].onDeathName == "spark");
+        CHECK(cfg.emitters[0].onDeathName == "shell" && cfg.emitters[0].onBounceName == "spark");
+        CHECK(cfg.findEvent("shell") == 1 && cfg.findEvent("missing") == -1);
+        CHECK(cfg.has("event"));
+        CHECK_THROWS(ember::Config::fromString("[event \"e\"]\ncount = 0x10\n"));
+        CHECK_THROWS(ember::Config::fromString("[event \"e\"]\nbogus = 1\n"));
+        CHECK_THROWS(ember::Config::fromString("[emitter \"e\"]\ncount = 3\n"));
+    }
+
+    // ---- lifecycle curves in INI -------------------------------------------------
+    {
+        ember::Config cfg = ember::Config::fromString(
+            "[curves]\nsize = 0:1, 0.5:1.2, 1:0\ncolor = 0:1,1,1,1, 1:1,0,0,0\n");
+        CHECK(cfg.sizeKeys.size() == 3);
+        CHECK(cfg.sizeKeys[0].t == 0.f && cfg.sizeKeys[0].value.x == 1.f);
+        CHECK(cfg.sizeKeys[1].t == 0.5f && std::abs(cfg.sizeKeys[1].value.x - 1.2f) < 1e-5f);
+        CHECK(cfg.colorKeys.size() == 2);
+        CHECK(cfg.colorKeys[0].value == glm::vec4(1,1,1,1));
+        CHECK(cfg.colorKeys[1].value == glm::vec4(1,0,0,0));
+        CHECK(cfg.has("curves.size") && cfg.has("curves.color"));
+        ember::Config empty = ember::Config::fromString("[curves]\nsize =\n");
+        CHECK(empty.has("curves.size") && empty.sizeKeys.empty());
+        CHECK_THROWS(ember::Config::fromString("[curves]\nsize = 0:1, 0:2\n"));
+        CHECK_THROWS(ember::Config::fromString("[curves]\nsize = 1.5:1\n"));
+        CHECK_THROWS(ember::Config::fromString("[curves]\nsize = 0:1,1\n"));
+        CHECK_THROWS(ember::Config::fromString("[curves]\ncolor = 0:1,1,1,1,1\n"));
+        CHECK_THROWS(ember::Config::fromString("[curves]\nbogus = 1\n"));
+    }
+
+    for (const char* text : {
+        "[system]\ncapacity = -1\n", "[system]\ncapacity = 4294967296\n",
+        "[system]\ngravity = nan,0,0\n", "[system]\ndrag = inf\n",
+        "[system]\nrefraction_mode = depht\n",
+        "[palette \"fire]\n", "[palette \"fire\" junk]\n"}) {
+        CHECK_THROWS(ember::Config::fromString(text));
+    }
+    {
+        ember::Emitter e;
+        e.shape = ember::Emitter::Shape::Cone; e.axis = {0,0,0};
+        e.refractive = true; e.rate = 10;
+        std::vector<ember::Particle> ps; ember::Rng rng(123);
+        CHECK(e.spawn(ps,10,0.1f,rng)==1);
+        CHECK(ps.size()==1 && ps[0].pos.w<0);
+        CHECK(std::isfinite(ps[0].pos.x) && std::isfinite(ps[0].pos.y) && std::isfinite(ps[0].pos.z));
+        e.rate = -1; CHECK_THROWS(e.takeCount(0.1f,10));
+        e.rate = 10; CHECK_THROWS(e.takeCount(-1.f,10));
+        e.accumulator = std::numeric_limits<float>::quiet_NaN();
+        CHECK(e.takeCount(0.1f,10)==1);
+    }
+
     if (g_failures == 0) {
         std::printf("config test: ALL PASSED\n");
         return 0;
     }
     std::printf("config test: %d FAILURES\n", g_failures);
     return 1;
+}
+
+int main(int argc, char** argv) {
+    try { return runConfigTests(argc, argv); }
+    catch (const std::exception& e) {
+        std::fprintf(stderr, "config test FAILED: %s\n", e.what());
+        return 1;
+    }
 }

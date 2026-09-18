@@ -11,6 +11,11 @@
 #include <glm/glm.hpp>
 
 #include <cstdio>
+#include <memory>
+#include <cmath>
+#include "ember/config.hpp"
+#include "regressions.hpp"
+#include "behavior.hpp"
 
 namespace {
 int g_failures = 0;
@@ -18,19 +23,22 @@ int g_failures = 0;
     do {                                                                  \
         if (!(cond)) {                                                    \
             std::printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #cond);   \
-            ++g_failures;                                                 \
+            throw std::runtime_error(#cond);                                                 \
         }                                                                 \
     } while (0)
 } // namespace
 
 int main() {
     // ---- context setup (skip cleanly when no GL is available) ------------
-    ember::Window* win = nullptr;
+    std::unique_ptr<ember::Window> win;
     try {
-        win = new ember::Window(64, 64, "ember system test", 0, /*vsync=*/false, /*visible=*/false);
-    } catch (const std::exception& e) {
+        win = std::make_unique<ember::Window>(64, 64, "ember system test", 0, /*vsync=*/false, /*visible=*/false);
+    } catch (const ember::ContextUnavailable& e) {
         std::printf("SKIP: cannot create GL 4.3 context: %s\n", e.what());
         return 77;
+    } catch (const std::exception& e) {
+        std::printf("FAIL: GL initialization: %s\n", e.what());
+        return 1;
     }
 
     try {
@@ -65,9 +73,10 @@ int main() {
         // ---- GPU spawn assertions (read back live particles) -------------------
         sys.setForceMask(0); // no gravity/drag: fresh velocities stay at spawn values
         sys.setGravity({0.f, 0.f, 0.f});
+        sys.clear();
         for (int i = 0; i < 5; ++i) sys.update(1.f / 60.f);
         {
-            const std::vector<ember::Particle> ps = sys.readParticles();
+            const std::vector<ember::Particle> ps = regression::particles(sys);
             CHECK(ps.size() == sys.aliveCount());
             bool speedOk = true, sizeOk = true, lifeOk = true;
             int fresh = 0;
@@ -100,7 +109,7 @@ int main() {
             sys2.addEmitter(e2);
             for (int i = 0; i < 3; ++i) sys2.update(1.f / 60.f);
             bool allPal = true, allFade = true;
-            for (const auto& p : sys2.readParticles()) {
+            for (const auto& p : regression::particles(sys2)) {
                 if (p.color != e2.palette[0] && p.color != e2.palette[1]) allPal = false;
                 if (glm::length(glm::vec3(p.life.y, p.life.z, p.life.w) - glm::vec3(p.color)) > 1e-5f)
                     allFade = false;
@@ -125,9 +134,11 @@ int main() {
             for (int i = 0; i < 3; ++i) sys3.update(1.f / 60.f);
             const float cosHalf = std::cos(glm::radians(30.f));
             bool allCone = true;
-            for (const auto& p : sys3.readParticles()) {
+            for (const auto& p : regression::particles(sys3)) {
+                const float speed = glm::length(glm::vec3(p.vel));
+                CHECK(std::isfinite(speed) && speed > 0.f);
                 const glm::vec3 dir = glm::normalize(glm::vec3(p.vel));
-                if (dir.y < cosHalf - 1e-3f) allCone = false;
+                if (!std::isfinite(dir.y) || dir.y < cosHalf - 1e-3f) allCone = false;
             }
             CHECK(allCone);
         }
@@ -147,10 +158,70 @@ int main() {
             sys4.update(1.f / 60.f);
             CHECK(sys4.aliveCount() == 500);
             bool burstOk = true;
-            for (const auto& p : sys4.readParticles()) {
+            for (const auto& p : regression::particles(sys4)) {
                 if (std::abs(glm::length(glm::vec3(p.vel)) - 5.f) > 1e-2f) burstOk = false;
             }
             CHECK(burstOk);
+        }
+
+        // ---- refraction: sign encoding + presets + no-throw renders --------------
+        {
+            ember::ParticleSystem sys5({2000, 1000});
+            sys5.setForceMask(0);
+            ember::Emitter e5;
+            e5.shape = ember::Emitter::Shape::Point;
+            e5.rate = 500.f;
+            e5.speedMin = e5.speedMax = 2.f;
+            e5.lifeMin = e5.lifeMax = 1.f;
+            e5.sizeMin = e5.sizeMax = 0.05f;
+            e5.refractive = true; // glass shards
+            sys5.addEmitter(e5);
+
+            ember::RefractionSettings r = ember::Refraction::glass();
+            CHECK(!r.enabled); // presets leave enabled to the caller
+            CHECK(r.mode == 0);
+            CHECK(r.chroma > 0.f && r.specular > 0.f && r.fresnel > 0.f);
+            r.enabled = true;
+            setOpenGLRefraction(sys5,r);
+            sys5.setSpin(1.5f);
+            for (int i = 0; i < 3; ++i) sys5.update(1.f / 60.f);
+
+            // refractive particles are sign-encoded in pos.w
+            bool allNeg = true;
+            for (const auto& p : regression::particles(sys5))
+                if (p.pos.w >= 0.f) allNeg = false;
+            CHECK(allNeg);
+
+            // no scene texture -> refraction pass skipped; must not throw
+            sys5.render(glm::mat4(1.f), glm::mat4(1.f), 64.f, 64.f, 50.f);
+
+            // noise mode (heat) renders without a scene texture too
+            ember::RefractionSettings h = ember::Refraction::heat();
+            CHECK(h.mode == 2);
+            h.enabled = true;
+            setOpenGLRefraction(sys5,h);
+            sys5.render(glm::mat4(1.f), glm::mat4(1.f), 64.f, 64.f, 50.f);
+
+            // depth-aware mode without a depth texture falls back to simple
+            ember::RefractionSettings d = ember::Refraction::water();
+            d.enabled = true;
+            d.mode = 1;
+            setOpenGLRefraction(sys5,d);
+            sys5.render(glm::mat4(1.f), glm::mat4(1.f), 64.f, 64.f, 50.f);
+
+            // refractive burst
+            ember::BurstParams b;
+            sys5.clearEmitters();
+            const auto beforeBurst = sys5.aliveCount();
+            b.count = 100;
+            b.refractive = true;
+            sys5.burst(b);
+            sys5.update(1.f / 60.f);
+            CHECK(sys5.aliveCount() == beforeBurst + 100);
+            allNeg = true;
+            for (const auto& p : regression::particles(sys5))
+                if (p.pos.w >= 0.f) allNeg = false;
+            CHECK(allNeg);
         }
 
         // ---- clear --------------------------------------------------------------
@@ -174,8 +245,8 @@ int main() {
         CHECK(sys.sortEnabled() == false);
         sys.setSortEnabled(true);   // GPU bitonic depth sort (runs inside render())
         CHECK(sys.sortEnabled());
-        sys.setSoftParticles(true); // no host depth texture -> soft path resolves off
-        sys.setSoftParticles(false);
+        setOpenGLSoftParticles(sys,true); // no host depth texture -> soft path resolves off
+        setOpenGLSoftParticles(sys,false);
         sys.setBloom(true);         // HDR chain: bright pass + blur + composite
         CHECK(sys.bloom());
         for (int i = 0; i < 3; ++i) sys.update(1.f / 60.f);
@@ -186,8 +257,9 @@ int main() {
         CHECK(sys.bloom() == false);
         CHECK(sys.sortEnabled() == false);
 
-        delete win;
-        win = nullptr;
+        regression::glClean("legacy smoke tests");
+        regression::run(*win);
+        behavior::run([](const ember::ParticleSettings& s) { return ember::ParticleSystem(s); });
 
         if (g_failures == 0) {
             std::printf("system test: ALL PASSED\n");
@@ -197,7 +269,6 @@ int main() {
         return 1;
     } catch (const std::exception& e) {
         std::printf("FAIL: %s\n", e.what());
-        delete win;
         return 1;
     }
 }

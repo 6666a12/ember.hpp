@@ -13,8 +13,14 @@
 #include <glm/glm.hpp>
 
 #include <functional>
+#include <stdexcept>
 
 namespace ember {
+
+class ContextUnavailable : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
 
 class Window {
 public:
@@ -26,10 +32,10 @@ public:
 
     bool shouldClose() const { return glfwWindowShouldClose(w_) != 0; }
     void pollEvents();
-    void swapBuffers() { glfwSwapBuffers(w_); }
-    void setTitle(const char* t) { glfwSetWindowTitle(w_, t); }
-    void setVsync(bool on) { glfwSwapInterval(on ? 1 : 0); }
-    void setCursorPos(glm::vec2 p) { glfwSetCursorPos(w_, p.x, p.y); }
+    void swapBuffers() { glfwSwapBuffers(w_); checkCallbacks(); }
+    void setTitle(const char* t) { glfwSetWindowTitle(w_, t); checkCallbacks(); }
+    void setVsync(bool on);
+    void setCursorPos(glm::vec2 p) { glfwSetCursorPos(w_, p.x, p.y); checkCallbacks(); }
 
     double time() const { return glfwGetTime(); }
     // Seconds since the last pollEvents(); updated every poll.
@@ -47,6 +53,8 @@ public:
 
     GLFWwindow* handle() const { return w_; }
 
+    // Exceptions are captured at the C boundary and rethrown by the next
+    // pollEvents/setTitle/setCursorPos/swapBuffers/setVsync on this thread.
     // Optional callbacks (GLFW-style signatures).
     std::function<void(int key, int scancode, int action, int mods)> onKey;
     std::function<void(double x, double y)> onCursorPos;
@@ -55,6 +63,7 @@ public:
     std::function<void(int width, int height)> onResize;
 
 private:
+    static void checkCallbacks();
     static Window* fromHandle(GLFWwindow* w) {
         return static_cast<Window*>(glfwGetWindowUserPointer(w));
     }

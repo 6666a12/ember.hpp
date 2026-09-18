@@ -1,5 +1,9 @@
 #version 430 core
-// ember simulation — dispatch with uPhase=0 (simulate), then uPhase=1 (spawn).
+// Stable slots: phase 0 integrates live indices; phase 3 reserves spawn slots;
+// phase 1 spawns; phase 2 publishes draw args. Live lists are ping-ponged.
+// GPU scheduling: uGpuDriven=1 reads input count from binding 13 word 0;
+// uGpuDriven=0 uses uInputAlive. schedule.comp resets draw/request counters
+// before phase 0. Keep both uniforms active for host protocol detection.
 layout(local_size_x = 64) in;
 
 struct Particle {
@@ -9,8 +13,8 @@ struct Particle {
     vec4 color; // rgba
 };
 
-layout(binding = 0, std430) readonly  buffer BufCur   { Particle cur[]; };
-layout(binding = 1, std430) writeonly buffer BufNext  { Particle nxt[]; };
+layout(binding = 0, std430) buffer BufCur   { Particle cur[]; };
+layout(binding = 1, std430) buffer BufNext  { Particle nxt[]; };
 // Spawn requests: the CPU encodes emitters/bursts as compact requests; this
 // shader samples the actual particles (shape, cone, palette, fade, size<->speed
 // link) with its own hash RNG. Layout matches ember::SpawnRequest (std430).
@@ -33,7 +37,7 @@ struct SpawnRequest {
     float sizeMax;
     int   shape;         // 0 point, 1 box, 2 sphere, 3 cone
     int   paletteIdx;    // base index into the palette buffer (-1 = colorMin/Max)
-    int   hasFade;       // write life.yzw = fade target
+    int   flags;         // bit0 = fade-to-color, bit1 = refractive (sign-encoded in pos.w)
     uint  base;          // prefix offset: spawns work ids [base, base+count)
     uint  count;
     int   paletteCount;  // colors in this palette range
@@ -43,8 +47,37 @@ struct SpawnRequest {
     uint  pad3;
 };
 layout(binding = 2, std430) readonly  buffer BufSpawnReq { SpawnRequest req[]; };
+// Event sub-emission (WO-08): per-slot metadata, templates and a bounded GPU
+// queue. Slot metadata is one uvec2: x = event tag (pad2 of the request),
+// y = birth id — a slot-independent genealogy hash. CPU spawns take
+// uFrameSeed ^ (j*phi); event children take parentBirth ^ (k*phi). Event seeds
+// derive from the PARENT'S BIRTH ID, never the slot — slot identity permutes
+// under free-stack recycling, which would otherwise make grandchildren values
+// nondeterministic across runs/backends. (Merged into one buffer: NVIDIA GL
+// exposes only 16 compute SSBO blocks, and this shader is at the limit.)
+layout(binding = 20, std430) buffer BufSlotMeta { uvec2 slotMeta[]; };
+layout(binding = 21, std430) readonly buffer BufEventTemplates { SpawnRequest eventTemplates[]; };
+struct GpuEvent {          // std430, 48 B
+    vec3 pos;
+    uint templateIdx;
+    vec3 vel;
+    uint parentBirth;      // parent's birth id (slot-independent, see BufBirthIds)
+    uint base;             // filled by phase 4 (0xFFFFFFFF = budget exhausted)
+    uint pad0;
+    uint pad1;
+    uint pad2;
+};
+layout(binding = 22, std430) coherent buffer BufEventQueue {
+    uint eventHead;
+    uint eventTotalChildren;
+    uint eventPad0;
+    uint eventPad1;
+    GpuEvent events[];
+};
+const uint kMaxEventInstances = 1024u;
+const uint kMaxEventChildren = 4096u;
 layout(binding = 9, std430) readonly  buffer BufPalette { vec4 palette[]; };
-layout(binding = 10, std430) writeonly buffer BufIndirectArgs { // uPhase=2 write (draw count)
+layout(binding = 10, std430) buffer BufIndirectArgs { // uPhase=2 write (draw count)
     uint vertexCount;    // always 4 (quad)
     uint instanceCount;  // alive
     uint firstVertex;    // 0
@@ -56,7 +89,13 @@ layout(binding = 4, std430) coherent  buffer BufCtr   {
     uint uDeadHead;
     uint uSpawnRequestCount;
     uint uCapacity;
+    uint uAllocated; // stable occupied-slot extent, changed only during spawning
+    uint uSpawnReuse; // phase 3 -> phase 1: recycled portion of this batch
+    uint uSpawnAppendBase;
+    uint uSpawnAccepted;
 };
+layout(binding = 11, std430) readonly buffer BufLive { uint liveIndices[]; };
+layout(binding = 12, std430) writeonly buffer BufNextLive { uint nextLiveIndices[]; };
 layout(binding = 5, std430) readonly buffer BufAttr { vec4 attractors[]; };
 
 struct Vortex {
@@ -72,37 +111,27 @@ struct Spring {
 };
 layout(binding = 7, std430) readonly buffer BufSpring { Spring springs[]; };
 
-// ---------------------------------------------------------------------------
-// Force switches. bit i corresponds to ember::Force enum value i:
-//   0 gravity   1 drag   2 wind   3 turbulence   4 attractors
-//   5 vortex    6 spring 7 noise_wind          8 wave    9 boundary
-// ---------------------------------------------------------------------------
-uniform uint uForceMask;
-
-uniform vec3  uGravity;
-uniform float uDrag;
-uniform int   uDragMode;      // 0 = linear, 1 = quadratic
-uniform vec3  uWind;
-uniform float uTurbulence;
-uniform int   uAttractorCount;
-uniform int   uVortexCount;
-uniform int   uSpringCount;
-uniform vec3  uNoiseWindDir;
-uniform float uNoiseWindAmp;
-uniform float uNoiseWindScale;
-uniform float uNoiseWindSpeed;
-uniform vec3  uWaveDir;
-uniform vec3  uWaveK;
-uniform float uWaveAmp;
-uniform float uWaveOmega;
-uniform int   uBoundaryMode;  // 1 = kill, 2 = bounce (mask bit 9 must be set)
-uniform float uBoundaryY;
-uniform float uRestitution;
-uniform float uDt;
-uniform float uTime;
-uniform int   uPhase;
-uniform uint  uSpawnTotal;     // total particles requested this frame (phase 1)
-uniform uint  uFrameSeed;      // per-frame RNG seed (phase 1)
+// All scalar state lives in one std140 block (no loose uniforms: the same
+// source must compile to SPIR-V for Vulkan). CPU mirror: SimParams in
+// src/backends/opengl/params.hpp. Force switches: bit i corresponds to
+// ember::Force enum value i (0 gravity .. 9 boundary).
+layout(binding = 14, std140) uniform SimParams {
+    vec3  uGravity;          float uDrag;
+    vec3  uWind;             float uTurbulence;
+    vec3  uNoiseWindDir;     float uNoiseWindAmp;
+    float uNoiseWindScale;   float uNoiseWindSpeed;
+    float uWaveAmp;          float uWaveOmega;
+    vec3  uWaveDir;          float uDt;
+    vec3  uWaveK;            float uTime;
+    uint  uForceMask;        int   uDragMode;      // 0 = linear, 1 = quadratic
+    int   uAttractorCount;   int   uVortexCount;
+    int   uSpringCount;      int   uBoundaryMode;  // 1 = kill, 2 = bounce (mask bit 9)
+    float uBoundaryY;        float uRestitution;
+    uint  uSpawnTotal;       uint  uFrameSeed;     // phase-1 request total / RNG seed
+    uint  uInputAlive;       int   uGpuDriven;     // population at update start / mode
+    int   uPhase;            uint  uEventTemplates; int uPad1; int uPad2;
+};
+layout(binding=13,std430) readonly buffer Schedule { uint scheduleWords[]; };
 
 // Deterministic hash RNG (splitmix-ish) — per-particle state derived from the
 // work id + frame seed, so concurrent spawn threads never share mutable state.
@@ -163,22 +192,11 @@ vec3 sampleDirection(inout uint s, SpawnRequest r) {
     return normalize(mix(normalize(r.dir), rngSphere(s), r.spread));
 }
 
-void spawnFromRequest(uint j) {
-    if (j >= uSpawnTotal) return;
-    // Requests are sorted by ascending base — binary search the owner.
-    int lo = 0, hi = int(uSpawnRequestCount) - 1;
-    while (lo < hi) {
-        int mid = (lo + hi + 1) >> 1;
-        if (req[mid].base <= j) lo = mid;
-        else hi = mid - 1;
-    }
-    SpawnRequest r = req[lo];
-    uint s = uFrameSeed ^ (j * 0x9E3779B9u);
-
-    // ---- sample the particle (mirrors the CPU Emitter::spawn formulas) ----
+// ---- shared sampling (mirrors the CPU Emitter::spawn formulas) ----
+Particle sampleParticle(SpawnRequest r, uint s) {
     Particle p;
     float size = rngRange(s, r.sizeMin, r.sizeMax);
-    p.pos = vec4(samplePosition(s, r), size);
+    p.pos = vec4(samplePosition(s, r), (r.flags & 2) != 0 ? -size : size);
     vec3 dirv = sampleDirection(s, r);
     float speed = rngRange(s, r.speedMin, r.speedMax);
     if (r.speedSizeLink > 0.0) {
@@ -197,27 +215,71 @@ void spawnFromRequest(uint j) {
                        rngRange(s, r.colorMin.a, r.colorMax.a));
     }
     // Fade target color (RGB) goes into life.yzw; unset => identity (no shift).
-    if (r.hasFade != 0) p.life.yzw = rngVec3(s, r.fadeMin, r.fadeMax);
+    if ((r.flags & 1) != 0) p.life.yzw = rngVec3(s, r.fadeMin, r.fadeMax);
     else p.life.yzw = p.color.rgb;
+    return p;
+}
 
-    // ---- slot recycling / append (unchanged from the pre-request path) ----
-    uint old = uDeadHead;
-    while (old > 0u) {
-        if (atomicCompSwap(uDeadHead, old, old - 1u) == old) {
-            uint slot = dead[(old - 1u) % uCapacity];
-            atomicAdd(uAlive, 1u); // the recycled particle is alive (its death already decremented)
-            nxt[slot] = p;
-            return;
-        }
-        old = uDeadHead;
-    }
-    // Stack empty — append instead (capacity guarded).
-    uint slot = atomicAdd(uAlive, 1u);
-    if (slot >= uCapacity) {
-        atomicAdd(uAlive, -1u); // capacity reached: drop this particle
-        return;
-    }
+// Phase 3 reserves a disjoint slot range once for the whole dispatch. No CAS
+// retries or per-particle global allocator atomics in the spawn hot path.
+uint spawnSlot(uint j) {
+    return j < uSpawnReuse ? dead[uDeadHead + uSpawnReuse - 1u - j]
+                           : uSpawnAppendBase + j - uSpawnReuse;
+}
+void writeSpawned(uint j, uint slot, Particle p, uint tag, uint birth) {
+    slotMeta[slot] = uvec2(tag, birth); // persisted for onDeath/onBounce (chaining included)
     nxt[slot] = p;
+    nextLiveIndices[indirectArgs.instanceCount + j] = slot;
+}
+
+void spawnFromRequest(uint j) {
+    if (j >= uSpawnAccepted) return;
+    // Requests are sorted by ascending base — binary search the owner.
+    int lo = 0, hi = int(uSpawnRequestCount) - 1;
+    while (lo < hi) {
+        int mid = (lo + hi + 1) >> 1;
+        if (req[mid].base <= j) lo = mid;
+        else hi = mid - 1;
+    }
+    SpawnRequest r = req[lo];
+    uint birth = uFrameSeed ^ (j * 0x9E3779B9u);
+    writeSpawned(j, spawnSlot(j), sampleParticle(r, birth), r.pad2, birth);
+}
+
+// Events triggered during phase 0 are appended to a bounded queue; phase 4
+// computes the child slot prefix and phase 1 samples the children.
+void enqueueEvent(vec3 pos, vec3 vel, uint templateIdx, uint parentBirth) {
+    uint q = atomicAdd(eventHead, 1u);
+    if (q < kMaxEventInstances) {
+        events[q].pos = pos;
+        events[q].vel = vel;
+        events[q].templateIdx = templateIdx;
+        events[q].parentBirth = parentBirth;
+    }
+}
+
+void spawnFromEvent(uint j) {
+    if (j >= uSpawnAccepted || uEventTemplates == 0u) return;
+    uint e = j - uSpawnTotal;
+    uint head = min(eventHead, kMaxEventInstances);
+    if (head == 0u) return;
+    // Instance table: base is non-decreasing; exhausted entries are sentinels.
+    int lo = 0, hi = int(head) - 1;
+    while (lo < hi) {
+        int mid = (lo + hi + 1) >> 1;
+        if (events[mid].base <= e) lo = mid;
+        else hi = mid - 1;
+    }
+    GpuEvent inst = events[lo];
+    if (inst.base == 0xFFFFFFFFu) return;
+    SpawnRequest r = eventTemplates[inst.templateIdx];
+    uint k = e - inst.base;
+    if (k >= r.count) return;
+    r.position = inst.pos; // children are born at the parent's death point
+    uint birth = inst.parentBirth ^ (k * 0x9E3779B9u);
+    Particle p = sampleParticle(r, birth);
+    p.vel.xyz += inst.vel * uintBitsToFloat(r.pad3);
+    writeSpawned(j, spawnSlot(j), p, r.pad2, birth);
 }
 
 float hash11(vec3 p) {
@@ -246,28 +308,40 @@ float snoise3(vec3 x) {
         f.z);
 }
 
-// Kill a particle: recycle its slot, shrink the alive count, leave a corpse marker.
-void retire(uint i) {
+// Kill a particle: queue an onDeath event, recycle its slot, shrink the alive
+// count, leave a corpse marker. `emitDeath` is false for the NaN guard (which
+// must not produce events); lifetime and boundary kills pass true.
+void retire(uint i, bool emitDeath) {
+    if (emitDeath && uEventTemplates != 0u) {
+        const uvec2 meta = slotMeta[i];
+        if ((meta.x & 0xFFFFu) != 0u && (meta.x & 0xFFFFu) - 1u < uEventTemplates) {
+            Particle p = cur[i];
+            enqueueEvent(p.pos.xyz, p.vel.xyz, (meta.x & 0xFFFFu) - 1u, meta.y);
+        }
+    }
     uint h = atomicAdd(uDeadHead, 1u);
     dead[h % uCapacity] = i;
     atomicAdd(uAlive, -1u);
     nxt[i] = Particle(vec4(0.0), vec4(0.0), vec4(-1.0), vec4(0.0));
+    // Keep both buffers' tombstones valid for slot-order readback and for
+    // switching to a legacy custom shader that scans the allocated extent.
+    cur[i] = nxt[i];
 }
 
-void simulate(uint i) {
+bool simulate(uint i) {
     Particle p = cur[i];
-    if (p.life.x < 0.0) return;          // corpse: slot belongs to the free stack
+    if (p.life.x < 0.0) return false;
     // NaN guard: a NaN particle is retired instead of poisoning the buffer
     // (NaN positions can also stall some drivers during rasterization).
     if (isnan(p.pos.x) || isnan(p.pos.y) || isnan(p.pos.z) ||
         isnan(p.vel.x) || isnan(p.vel.y) || isnan(p.vel.z)) {
-        retire(i);
-        return;
+        retire(i, false);
+        return false;
     }
     p.vel.w += uDt;                      // age
     if (p.vel.w >= p.life.x) {
-        retire(i);
-        return;
+        retire(i, true);
+        return false;
     }
 
     // ---- force accumulation (each term guarded by uForceMask) -------------
@@ -308,48 +382,83 @@ void simulate(uint i) {
             acc += d * s.stiffness - p.vel.xyz * s.damping;
         }
     }
-    if ((uForceMask & (1u << 7u)) != 0u && uNoiseWindAmp > 0.0) {         // spatial noise wind
+    if ((uForceMask & (1u << 7u)) != 0u && uNoiseWindAmp != 0.0) {        // signed spatial noise wind
         float n = snoise3(p.pos.xyz * uNoiseWindScale + uTime * uNoiseWindSpeed);
         acc += uNoiseWindDir * (n * 2.0 - 1.0) * uNoiseWindAmp;
     }
-    if ((uForceMask & (1u << 8u)) != 0u && uWaveAmp > 0.0) {              // traveling wave
+    if ((uForceMask & (1u << 8u)) != 0u && uWaveAmp != 0.0) {             // signed traveling wave
         float phase = dot(p.pos.xyz, uWaveK) + uTime * uWaveOmega;
         acc += uWaveDir * (sin(phase) * uWaveAmp);
     }
 
     // Semi-implicit Euler integration.
     p.vel.xyz += acc * uDt;
+    p.vel.xyz = clamp(p.vel.xyz, vec3(-500.0), vec3(500.0)); // guard BEFORE displacement
     p.pos.xyz += p.vel.xyz * uDt;
-    p.vel.xyz = clamp(p.vel.xyz, vec3(-500.0), vec3(500.0)); // explode guard
 
     // ---- boundary plane (y < uBoundaryY) -----------------------------------
     if ((uForceMask & (1u << 9u)) != 0u && uBoundaryMode != 0 && p.pos.y < uBoundaryY) {
         if (uBoundaryMode == 1) {          // kill
-            retire(i);
-            return;
+            retire(i, true);
+            return false;
         }
         p.pos.y = uBoundaryY;              // bounce
-        p.vel.y = -p.vel.y * uRestitution;
+        if (p.vel.y < 0.0) p.vel.y = -p.vel.y * uRestitution;
         if (abs(p.vel.y) < 0.1) p.vel.y = 0.0; // settle on the plane
+        if (uEventTemplates != 0u) {       // onBounce: every contact triggers
+            const uvec2 meta = slotMeta[i];
+            const uint onBounce = meta.x >> 16;
+            if (onBounce != 0u && onBounce - 1u < uEventTemplates)
+                enqueueEvent(p.pos.xyz, p.vel.xyz, onBounce - 1u, meta.y);
+        }
     }
     nxt[i] = p;
+    return true;
 }
 
 void main() {
     if (uPhase == 0) {
-        uint i = gl_GlobalInvocationID.x;
-        if (i >= uAlive) return;
-        simulate(i);
-    } else if (uPhase == 1) {
-        spawnFromRequest(gl_GlobalInvocationID.x);
-    } else if (uPhase == 2) {
-        // Publish the draw count for glDrawArraysIndirect (host no longer needs
-        // the per-frame alive readback to issue the draw).
-        if (gl_GlobalInvocationID.x == 0u) {
-            indirectArgs.vertexCount = 4u;
-            indirectArgs.instanceCount = uAlive;
-            indirectArgs.firstVertex = 0u;
-            indirectArgs.baseInstance = 0u;
+        uint j = gl_GlobalInvocationID.x;
+        if (j >= (uGpuDriven != 0 ? scheduleWords[0] : uInputAlive)) return;
+        uint i = liveIndices[j];
+        if (simulate(i)) {
+            uint drawIndex = atomicAdd(indirectArgs.instanceCount, 1u);
+            nextLiveIndices[drawIndex] = i;
         }
+    } else if (uPhase == 4) {
+        // Serial prefix sum over this frame's event instances (<= 1024 adds);
+        // exhausting the child budget marks later instances as sentinels.
+        if (gl_GlobalInvocationID.x == 0u) {
+            uint head = min(eventHead, kMaxEventInstances);
+            uint running = 0u;
+            for (uint q = 0u; q < head; ++q) {
+                if (running >= kMaxEventChildren) {
+                    events[q].base = 0xFFFFFFFFu;
+                    continue;
+                }
+                events[q].base = running;
+                running = min(running + eventTemplates[events[q].templateIdx].count,
+                              kMaxEventChildren);
+            }
+            eventTotalChildren = running;
+        }
+    } else if (uPhase == 3 && gl_GlobalInvocationID.x == 0u) {
+        // Integration has finished and no producer/consumer overlaps this
+        // reservation. Recycle first, then append; bounded without atomics.
+        // Event children are part of the same batch and share the accounting.
+        uint batchTotal = uSpawnTotal + eventTotalChildren;
+        uSpawnReuse = min(batchTotal, uDeadHead);
+        uSpawnAppendBase = uAllocated;
+        uint appendCount = min(batchTotal - uSpawnReuse, uCapacity - uAllocated);
+        uSpawnAccepted = uSpawnReuse + appendCount;
+        uDeadHead -= uSpawnReuse;
+        uAllocated += appendCount;
+        uAlive += uSpawnAccepted;
+    } else if (uPhase == 1) {
+        uint j = gl_GlobalInvocationID.x;
+        if (j < uSpawnTotal) spawnFromRequest(j);
+        else spawnFromEvent(j);
+    } else if (uPhase == 2) {
+        if (gl_GlobalInvocationID.x == 0u) indirectArgs.instanceCount = uAlive;
     }
 }

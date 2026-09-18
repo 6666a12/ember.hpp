@@ -19,6 +19,8 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <cmath>
+#include <limits>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -33,9 +35,18 @@ struct Palette {
 };
 
 // Mirrors Emitter + configuration metadata (section name / referenced palette).
+// Explicit-time lifecycle-curve key (WO-09): t in [0,1], value = rgba (color)
+// or .x = size. The facade resamples these to uniform 64-entry LUTs.
+struct CurveKey {
+    float t = 0.f;
+    glm::vec4 value{1.f};
+};
+
 struct EmitterConfig : public Emitter {
     std::string name;
-    std::string paletteName; // optional: [palette "..."] to take colors from
+    std::string paletteName;  // optional: [palette "..."] to take colors from
+    std::string onDeathName;  // [emitter]/[event] on_death = <event name>
+    std::string onBounceName; // [emitter]/[event] on_bounce = <event name>
 };
 
 struct Config {
@@ -71,16 +82,23 @@ struct Config {
         bool editor = true;               // examples: interactive emitter editor (runtime toggle)
 
         // ---- rendering extras ----
-        float streak = 0.f;               // >0: stretch quads along velocity (trails)
+        float streak = 0.f;               // >0: centered stretch along projected particle motion
         bool softParticles = false;       // fade particles near host scene depth
         float softRadius = 0.5f;
         bool bloom = false;               // additive HDR bloom post-process
         float bloomThreshold = 1.f;
         bool sort = false;                // GPU depth sort (OIT: correct alpha blending)
+        float spin = 0.f;                 // billboard spin speed in rad/s (0 = off)
+        bool refraction = false;          // refractive particles (glass; host supplies scene texture)
+        std::string refractionMode = "simple"; // simple | depth | noise
+        float refractionStrength = 0.02f; // refraction offset strength
     };
     System system;
     std::vector<Palette> palettes;
     std::vector<EmitterConfig> emitters;
+    std::vector<EmitterConfig> events;
+    std::vector<CurveKey> colorKeys; // [curves] color: value = rgba
+    std::vector<CurveKey> sizeKeys;  // [curves] size:  value.x = size
     std::vector<Attractor> attractors;
     std::vector<Vortex> vortexes;
     std::vector<Spring> springs;
@@ -100,11 +118,22 @@ struct Config {
         return nullptr;
     }
 
+    // Event template index by [event] name, or -1 when absent.
+    int findEvent(const char* name) const {
+        for (std::size_t i = 0; i < events.size(); ++i)
+            if (events[i].name == name) return (int)i;
+        return -1;
+    }
+
     static Config fromFile(const char* path) {
         std::ifstream f(path);
         if (!f) throw std::runtime_error(std::string("ember config: cannot open '") + path + "'");
         std::ostringstream ss;
-        ss << f.rdbuf();
+        char buffer[4096];
+        while (f.read(buffer, sizeof(buffer))) ss.write(buffer, f.gcount());
+        ss.write(buffer, f.gcount());
+        if (f.bad() || !f.eof() || !ss)
+            throw std::runtime_error(std::string("ember config: read failed: ") + path);
         return fromString(ss.str());
     }
 
@@ -114,9 +143,8 @@ struct Config {
         std::string line;
         int lineNo = 0;
 
-        enum class Section { None, System, Palette, Emitter, Attractor, Vortex, Spring };
+        enum class Section { None, System, Palette, Emitter, Event, Curves, Attractor, Vortex, Spring };
         Section section = Section::None;
-        std::string sectionName;
         Palette* pal = nullptr;
         EmitterConfig* em = nullptr;
 
@@ -137,9 +165,11 @@ struct Config {
                 if (line.back() != ']') fail("malformed section header '" + line + "'");
                 const std::string body = trim(line.substr(1, line.size() - 2));
                 const std::string lower = toLower(body);
-                const std::string sec = lower.substr(0, lower.find(' ')); // section keyword
+                const std::string sec = lower.substr(0, lower.find_first_of(" \t")); // section keyword
                 if (sec == "system") {
                     section = Section::System;
+                } else if (sec == "curves") {
+                    section = Section::Curves;
                 } else if (sec == "attractor") {
                     cfg.attractors.push_back(Attractor{});
                     cfg.specified.push_back("attractor");
@@ -154,14 +184,22 @@ struct Config {
                         cfg.specified.push_back("spring");
                         section = Section::Spring;
                     }
-                } else if (sec == "palette" || sec == "emitter") {
-                    const std::string arg = sectionArg(body);
+                } else if (sec == "palette" || sec == "emitter" || sec == "event") {
+                    std::string arg;
+                    try { arg = sectionArg(body); }
+                    catch (const std::invalid_argument&) { fail("malformed named section: " + body); }
                     if (sec == "palette") {
                         for (auto& p : cfg.palettes)
                             if (p.name == arg) fail("duplicate palette '" + arg + "'");
                         cfg.palettes.push_back(Palette{arg, {}});
                         pal = &cfg.palettes.back();
                         section = Section::Palette;
+                    } else if (sec == "event") {
+                        cfg.events.push_back(EmitterConfig{});
+                        cfg.specified.push_back("event");
+                        em = &cfg.events.back();
+                        em->name = arg;
+                        section = Section::Event;
                     } else {
                         cfg.emitters.push_back(EmitterConfig{});
                         cfg.specified.push_back("emitter");
@@ -169,7 +207,6 @@ struct Config {
                         em->name = arg;
                         section = Section::Emitter;
                     }
-                    sectionName = arg;
                 } else {
                     fail("unknown section '" + body + "'");
                 }
@@ -180,12 +217,19 @@ struct Config {
             if (eq == std::string::npos) fail("expected 'key = value', got '" + line + "'");
             const std::string key = toLower(trim(line.substr(0, eq)));
             const std::string value = trim(line.substr(eq + 1));
-            if (key.empty() || value.empty()) fail("empty key or value in '" + line + "'");
+            // Explicitly empty values are allowed for texture (built-in sprite)
+            // and the curves channels (disable the curve).
+            const bool emptyAllowed = (section == Section::System && key == "texture") ||
+                                      (section == Section::Curves && (key == "size" || key == "color"));
+            if (key.empty() || (value.empty() && !emptyAllowed))
+                fail("empty key or value in '" + line + "'");
 
             // Record key presence so apply() can keep untouched state.
             const char* secName = section == Section::System ? "system"
                 : section == Section::Palette ? "palette"
                 : section == Section::Emitter ? "emitter"
+                : section == Section::Event ? "event"
+                : section == Section::Curves ? "curves"
                 : section == Section::Attractor ? "attractor"
                 : section == Section::Vortex ? "vortex"
                 : section == Section::Spring ? "spring"
@@ -230,6 +274,14 @@ struct Config {
                     else if (key == "bloom") cfg.system.bloom = parseBool(value, lineNo);
                     else if (key == "bloom_threshold") cfg.system.bloomThreshold = parseFloat(value, lineNo);
                     else if (key == "sort") cfg.system.sort = parseBool(value, lineNo);
+                    else if (key == "spin") cfg.system.spin = parseFloat(value, lineNo);
+                    else if (key == "refraction") cfg.system.refraction = parseBool(value, lineNo);
+                    else if (key == "refraction_mode") {
+                        cfg.system.refractionMode = toLower(value);
+                        if (cfg.system.refractionMode != "simple" && cfg.system.refractionMode != "depth" && cfg.system.refractionMode != "noise")
+                            fail("unknown refraction_mode: " + value);
+                    }
+                    else if (key == "refraction_strength") cfg.system.refractionStrength = parseFloat(value, lineNo);
                     else fail("unknown key '" + key + "' in [system]");
                     break;
                 }
@@ -241,7 +293,8 @@ struct Config {
                     } else fail("unknown key '" + key + "' in [palette]");
                     break;
                 }
-                case Section::Emitter: {
+                case Section::Emitter:
+                case Section::Event: {
                     if (key == "shape") em->shape = parseShape(value, lineNo);
                     else if (key == "position") em->position = parseVec3(value, lineNo);
                     else if (key == "base_velocity") em->baseVelocity = parseVec3(value, lineNo);
@@ -260,6 +313,7 @@ struct Config {
                     else if (key == "color_max") em->colorMax = parseVec4(value, lineNo);
                     else if (key == "palette") em->paletteName = value;
                     else if (key == "active") em->active = parseBool(value, lineNo);
+                    else if (key == "refractive") em->refractive = parseBool(value, lineNo);
                     else if (key == "cone_angle") em->coneAngle = parseFloat(value, lineNo);
                     else if (key == "speed_size_link") em->speedSizeLink = parseFloat(value, lineNo);
                     else if (key == "speed_scale") em->speedScale = parseFloat(value, lineNo);
@@ -271,7 +325,30 @@ struct Config {
                         em->fadeColorMax = parseVec3(value, lineNo);
                         em->hasFadeColor = true;
                     }
-                    else fail("unknown key '" + key + "' in [emitter]");
+                    else if (key == "on_death") em->onDeathName = value;
+                    else if (key == "on_bounce") em->onBounceName = value;
+                    else if (key == "count") {
+                        if (section != Section::Event) fail("unknown key '" + key + "' in [emitter]");
+                        em->eventCount = parseUInt(value, lineNo);
+                    }
+                    else if (key == "inherit") {
+                        if (section != Section::Event) fail("unknown key '" + key + "' in [emitter]");
+                        em->inheritVelocity = parseFloat(value, lineNo);
+                    }
+                    else fail("unknown key '" + key + "' in [" +
+                              std::string(section == Section::Event ? "event" : "emitter") + "]");
+                    break;
+                }
+                case Section::Curves: {
+                    if (value.empty()) { // explicit empty = close the channel
+                        if (key == "color") cfg.colorKeys.clear();
+                        else if (key == "size") cfg.sizeKeys.clear();
+                        else fail("unknown key '" + key + "' in [curves]");
+                    } else if (key == "color") {
+                        cfg.colorKeys = parseCurveKeys(value, lineNo, 4);
+                    } else if (key == "size") {
+                        cfg.sizeKeys = parseCurveKeys(value, lineNo, 1);
+                    } else fail("unknown key '" + key + "' in [curves]");
                     break;
                 }
                 case Section::Attractor: {
@@ -329,17 +406,19 @@ private:
     }
     // "[section \"arg\"]" -> "arg"; "[section]" -> section name
     static std::string sectionArg(const std::string& body) {
-        const std::size_t q = body.find('"');
-        if (q == std::string::npos) return body;
-        const std::size_t q2 = body.find('"', q + 1);
-        if (q2 == std::string::npos) return body;
-        return body.substr(q + 1, q2 - q - 1);
+        const auto split = body.find_first_of(" \t");
+        if (split == std::string::npos) return body; // unnamed emitter
+        const std::string arg = trim(body.substr(split));
+        if (arg.size() < 2 || arg.front() != '"' || arg.back() != '"' ||
+            arg.find('"', 1) != arg.size() - 1)
+            throw std::invalid_argument("malformed section");
+        return arg.substr(1, arg.size() - 2);
     }
     static float parseFloat(const std::string& v, int line) {
         try {
             std::size_t pos = 0;
             const float f = std::stof(v, &pos);
-            if (pos != v.size()) throw std::invalid_argument("trailing");
+            if (pos != v.size() || !std::isfinite(f)) throw std::invalid_argument("invalid number");
             return f;
         } catch (...) {
             throw std::runtime_error("ember config: bad number '" + v + "' (line " + std::to_string(line) + ")");
@@ -348,8 +427,9 @@ private:
     static std::uint32_t parseUInt(const std::string& v, int line) {
         try {
             std::size_t pos = 0;
-            const unsigned long u = std::stoul(v, &pos);
-            if (pos != v.size()) throw std::invalid_argument("trailing");
+            if (v.empty() || v.front() == '-') throw std::invalid_argument("negative");
+            const unsigned long long u = std::stoull(v, &pos);
+            if (pos != v.size() || u > std::numeric_limits<std::uint32_t>::max()) throw std::invalid_argument("trailing");
             return (std::uint32_t)u;
         } catch (...) {
             throw std::runtime_error("ember config: bad integer '" + v + "' (line " + std::to_string(line) + ")");
@@ -371,6 +451,40 @@ private:
         if (t.size() != 4) throw std::runtime_error("ember config: expected 4 numbers (line " + std::to_string(line) + ")");
         return glm::vec4(parseFloat(trim(t[0]), line), parseFloat(trim(t[1]), line),
                          parseFloat(trim(t[2]), line), parseFloat(trim(t[3]), line));
+    }
+    // Comma-separated "t:c0,c1,..." keys. Each key carries exactly `components`
+    // values; t must lie in [0,1] and strictly increase.
+    static std::vector<CurveKey> parseCurveKeys(const std::string& v, int line, int components) {
+        std::vector<CurveKey> out;
+        const auto toks = split(v, ',');
+        std::size_t i = 0;
+        while (i < toks.size()) {
+            const std::string tok = trim(toks[i]);
+            const std::size_t colon = tok.find(':');
+            if (colon == std::string::npos)
+                throw std::runtime_error("ember config: curves key must be 't:value' (line " + std::to_string(line) + ")");
+            CurveKey k;
+            k.t = parseFloat(tok.substr(0, colon), line);
+            if (k.t < 0.f || k.t > 1.f)
+                throw std::runtime_error("ember config: curves t must be in [0,1] (line " + std::to_string(line) + ")");
+            if (!out.empty() && k.t <= out.back().t)
+                throw std::runtime_error("ember config: curves t must strictly increase (line " + std::to_string(line) + ")");
+            std::vector<float> vals;
+            vals.push_back(parseFloat(tok.substr(colon + 1), line));
+            ++i;
+            while (i < toks.size() && toks[i].find(':') == std::string::npos) {
+                vals.push_back(parseFloat(trim(toks[i]), line));
+                ++i;
+            }
+            if ((int)vals.size() != components)
+                throw std::runtime_error("ember config: curves key needs " + std::to_string(components) +
+                                         " component(s) (line " + std::to_string(line) + ")");
+            for (int c = 0; c < components; ++c) k.value[c] = vals[c];
+            out.push_back(k);
+        }
+        if (out.empty())
+            throw std::runtime_error("ember config: empty curves list (line " + std::to_string(line) + ")");
+        return out;
     }
     static Emitter::Shape parseShape(const std::string& v, int line) {
         const std::string l = toLower(v);

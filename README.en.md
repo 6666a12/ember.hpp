@@ -6,22 +6,36 @@ A **modern OpenGL (4.3 core)** GPU particle animation library. Simulation runs o
 
 ## Features
 
-- **GPU simulation**: three-stage compute pipeline (integrate / spawn / indirect draw args) with SSBO ping-pong buffers; particle sampling (shapes / cones / palettes / fade / size↔speed link) happens **entirely on the GPU** — the CPU encodes a few compact **spawn requests** (~176 B each) per frame and reads back 16 bytes
-- **Automatic slot recycling**: a free-stack (atomic CAS pop + LIFO, concurrency-safe) reuses dead slots — no compaction, zero alive-count drift
+- **GPU simulation**: integrate live indices, reserve birth slots in a batch, spawn, then publish indirect draw args. Particle and live-index buffers are ping-ponged; sampling happens on the GPU. The CPU encodes compact **spawn requests** (~176 B each) and, by default, reads back 20 bytes (GPU scheduling can avoid this synchronous read)
+- **Automatic slot recycling**: batch reservation reuses free-stack slots without contended per-particle CAS; stable slots preserve particle identity
 - **Force fields**: gravity / drag (linear·quadratic) / uniform wind / value-noise turbulence / point attractors / vortices / springs / spatial noise wind / traveling waves / plane boundary (kill·bounce); every force can be **toggled independently** (`enableForce`/`disableForce` bitmask)
 - **Emitters**: Point / Box / Sphere / Cone shapes with randomized speed / lifetime / size / color ranges; cone half-angle, size↔speed link (bigger particles fly faster)
 - **Editable config layer**: INI-style files (`config/example.ini`) expose every parameter; examples hot-reload on `R`; programmatic APIs (`setGravity`/`setDrag`/`setAttractors`/…) coexist
 - **Interactive emitter editor** (examples only, `EMBER_BUILD_EDITOR`): `1-9` pick source, `WASD` move, mouse place, `[ ]` scale shape, `- =` rate, `P` print config snippet
 - **Sprites**: built-in radial gradient + optional PNG (stb_image), sprite-sheet frame animation, fade-to-color on death
 - **Billboard quad rendering**: view-aligned quads (`TRIANGLE_STRIP`×4, no vertex attributes — expanded from `gl_VertexID` in the VS), replacing point sprites
-- **Streak trails**: quads stretch along the view-projected velocity; `sys.setStreak(k)`
-- **Soft particles**: sample a host-provided scene depth texture and fade near occluders (`sys.setSoftParticles(on, depthTex, radius)`)
-- **GPU depth sort (OIT)**: compute bitonic sort reorders draws far→near for correct alpha blending (`sys.setSortEnabled(true)`); off by default
+- **Streaks**: centered quads stretch along projected particle motion, including perspective depth motion; `sys.setStreak(k)`. This is instantaneous stretching without position history; see the [streak notes](docs/streak.md).
+- **Billboard spin**: random static angle + age-based spin (`sys.setSpin(speed)` / `[system] spin`) — tumbling leaves/confetti/shards
+- **Refractive particles (glass shards)**: screen-space refraction — particles sample the host's scene texture with per-particle facet offsets (`setOpenGLRefraction(sys, ...)` / `[system] refraction`); glass/heat/water/prism presets (`ember::Refraction::glass()/heat()/water()/prism()`); see `example_glass`
+- **Soft particles**: sample a host-provided scene depth texture and fade near occluders (`setOpenGLSoftParticles(sys, on, depthTex, radius)`)
+- **GPU depth sort**: compute bitonic sort reorders draws far→near for correct alpha blending (`sys.setSortEnabled(true)`); off by default
 - **HDR bloom post-processing**: built-in FBO chain (bright pass → 2×2 downsample → two Gaussian blurs → composite onto the host framebuffer), `sys.setBloom(true)` / `B` key
 - **Indirect rendering**: draw instance count comes from a GPU-written args buffer (`glDrawArraysIndirect`) — the CPU readback is not on the render path
+- **Event sub-emission**: particles spawn a child batch in the same frame on death/bounce (`addEventEmitter` + `Emitter::onDeath/onBounce`, INI `[event "name"]` / `on_death` / `on_bounce`), chaining supported (multi-stage fireworks), child velocity inherits the parent via `inheritVelocity`; both backends match bit-for-bit
+- **Lifecycle curves**: color/size over lifetime (`setColorOverLife` / `setSizeOverLife` / INI `[curves]`); the facade bakes 64-entry LUTs with multiply semantics, and an empty curve renders bit-identically to the previous behavior
 - **Embed-friendly**: CMake `add_subdirectory` / `FetchContent` / `find_package`, direct source compilation, or the **single header** `single_header/ember.hpp`
 
+## Backend organization
+
+The CPU facade and the graphics backends are separate: `ember::core` depends only on glm; `ember::opengl` supplies GL 4.3, while the existing `ember` target and default constructor remain compatible; `ember::vulkan` (`-DEMBER_BUILD_VULKAN=ON`, default) supplies Vulkan 1.1. Use `-DEMBER_BUILD_OPENGL=OFF` for core only, or `-DEMBER_BUILD_GLFW=OFF` to omit the window module. Implement `ParticleBackend` to inject another backend with individually declared optional capabilities.
+
+See the [backend contract and migration map](docs/backends.md) (Chinese). Two graphics backends are implemented: OpenGL 4.3 and Vulkan 1.1 (GPU scheduling, depth sorting, sprites, soft particles, refraction, bloom, event sub-emission and lifecycle curves are all aligned; `capabilities()` returns all true; Vulkan also supports host command-buffer recording via `beginVulkanFrame`/`endVulkanFrame`). The Vulkan module only builds when Vulkan-Headers and a loader are found; otherwise it is skipped silently.
+
+Effect fixes, regression coverage and remaining approximations are recorded in the [effect audit](docs/effects-audit.md) (Chinese).
+
 ## Dependencies
+
+The table below describes the default OpenGL build; core only requires glm.
 
 | Dependency | Role | Required | Notes |
 | --- | --- | --- | --- |
@@ -30,6 +44,7 @@ A **modern OpenGL (4.3 core)** GPU particle animation library. Simulation runs o
 | glm (≥ 0.9.9) | math (header-only) | ✅ | vec/mat types |
 | GLFW 3.4 | windows (examples / `ember_glfw` module / `EMBER_USE_GLFW`) | optional | not needed by the core |
 | stb_image | PNG sprites (`EMBER_USE_STB`) | optional | without it `setSpriteTexture` falls back to the built-in gradient |
+| Vulkan-Headers + loader (1.1+) | Vulkan backend | optional | only for `-DEMBER_BUILD_VULKAN=ON` (default); missing → module skipped. glslangValidator builds the SPIR-V |
 | CMake ≥ 3.16 | build | optional | non-CMake projects compile the sources / single header directly |
 | Python 3 | only when FetchContent pulls glad | optional | glad generator (offline builds need jinja2) |
 
@@ -50,6 +65,10 @@ Offline / restricted-network builds: the repo vendors dependency tarballs in `de
 
 Demo controls: left-drag = orbit camera, wheel = zoom, `R` = hot-reload config, `ESC` = quit. Stress test: `./build/example_basic config/stress.ini` (1M particle capacity).
 
+```bash
+./build/example_glass          # refractive glass shards (G cycles presets, SPACE bursts)
+```
+
 ## Quick start
 
 ```cpp
@@ -61,10 +80,10 @@ sys.setDrag(0.05f);
 sys.setTurbulence(0.4f);
 sys.setAttractors({{/* position */ {0, 1, 0}, /* strength */ 60.f}});
 sys.setStreak(1.2f);                            // spark trails
-sys.setSortEnabled(true);                       // GPU depth sort (OIT)
+sys.setSortEnabled(true);                       // GPU depth sort
 sys.setBloom(true);                             // HDR bloom
 // Soft particles (host passes its scene depth texture):
-//   sys.setSoftParticles(true, depthTex, 0.6f);
+//   setOpenGLSoftParticles(sys, true, depthTex, 0.6f);
 
 auto& fountain = sys.addEmitter();
 fountain.shape = ember::Emitter::Shape::Cone;
@@ -94,7 +113,7 @@ streak          = 1.2       # >0: stretch quads along velocity
 soft_particles  = false     # needs a host-provided scene depth texture
 bloom           = true      # HDR bloom post-processing
 bloom_threshold = 0.8       # bright-pass cutoff (default 1.0)
-sort            = false     # GPU depth sort (OIT)
+sort            = false     # GPU depth sort
 
 [palette "fire"]
 colors = 1,0.95,0.55,1 | 1,0.6,0.15,1 | 1,0.18,0.05,1
@@ -134,24 +153,25 @@ In code: `sys.loadConfig("config/example.ini")` or `sys.apply(Config::fromFile(.
 | 32 | `life` vec4 | x = lifetime; x<0 = corpse slot; **yzw = fade target RGB** |
 | 48 | `color` vec4 | rgba |
 
-### Frame pipeline (rendering never depends on the CPU readback; the only sync is the 16-byte alive readback for UI/API)
+### Default synchronous frame pipeline
 
 ```
 CPU encodes spawn requests (emitters + bursts, ~176 B each, capped at maxSpawnPerFrame)
    → request SSBO + uSpawnRequestCount + uSpawnTotal
-   → dispatch A (phase=0): integrate + retire into the free stack   [barrier]
-   → dispatch B (phase=1): GPU samples spawns (recycle slot or append) [barrier]
-   → dispatch C (phase=2): write glDrawArraysIndirect args           [barrier]
-   → read back uAlive (16 bytes, for aliveCount()/UI) → swap cur/nxt
+   → phase=0: integrate live indices, retire slots, append survivors to next list [barrier]
+   → phase=3: reserve the whole free/append batch (when spawning) [barrier]
+   → phase=1: sample particles and append their indices (when spawning) [barrier]
+   → phase=2: publish indirect instanceCount in one invocation [barrier]
+   → read first five counters (20 B) → swap particles and live-index lists
    → [optional] GPU bitonic sort (far→near; VS reads sorted[] when uUseSorted=1)
    → glDrawArraysIndirect (instance count from the GPU args buffer)
 ```
 
 `SpawnRequest` (176 B std430, see `ember/emitters.hpp`) carries shape / cone / speed / life / size ranges / palette index etc.; the GPU samples each particle with a hash RNG — the CPU uploads only a few KB of requests per frame instead of full particles.
 
-### Force fields (11, independently toggleable)
+### Force fields (10, independently toggleable)
 
-`sys.enableForce(Force::X)` / `sys.disableForce(Force::X)`; the `Force` enum value is the bit index, query with `sys.forceMask()`. Default: the original 5 forces on, the 6 newer ones off.
+`sys.enableForce(Force::X)` / `sys.disableForce(Force::X)`; the `Force` enum value is the bit index, query with `sys.forceMask()`. Default: the original 5 forces on, the 5 newer ones off.
 
 | Category | Force | Formula / behavior | API | Config key |
 | --- | --- | --- | --- | --- |
@@ -174,28 +194,31 @@ Default shaders load **from `shaders/` first** (`particle.vert` / `particle.frag
 ember::Shader render = ember::Shader::fromFiles({{GL_VERTEX_SHADER, "my.vert"},
                                                  {GL_FRAGMENT_SHADER, "my.frag"}});
 ember::Shader sim = ember::Shader::fromFiles({{GL_COMPUTE_SHADER, "my.comp"}});
-sys.setPrograms(std::move(render), std::move(sim));
+setOpenGLPrograms(sys.backend(), std::move(render), std::move(sim));
 ```
 
 Custom shaders must follow this contract (uniform names + SSBO bindings):
 
 | Binding | Buffer | Purpose |
 | --- | --- | --- |
-| 0 | `cur` / `particles` | current particles (sim read / render VS read) |
-| 1 | `nxt` | next-frame particles (sim write) |
+| 0 | `cur` / `particles` | current particles (sim reads and writes retirement tombstones; render VS reads) |
+| 1 | `nxt` | next particles; phases 0/1 write |
 | 2 | `req` | spawn requests (`SpawnRequest[]`, read-only; GPU samples spawns) |
 | 3 | `dead` | free-slot stack (coherent) |
-| 4 | `counters` | `uAlive uDeadHead uSpawnRequestCount uCapacity` (coherent) |
+| 4 | `counters` | `uAlive uDeadHead uSpawnRequestCount uCapacity uAllocated uSpawnReuse uSpawnAppendBase uSpawnAccepted` (coherent) |
 | 5 | `attractors` | vec4 attractors (read-only) |
 | 6 | `vortexes` | `Vortex` array (read-only) |
-| 7 | `springs` | `Spring` array (read-only) |
+| 7 | `springs` | `Spring[]`: std430 stride **32 B**, offsets anchor=0, stiffness=12, damping=16 |
 | 8 | `sorted` | GPU-sorted particle indices (render VS read, optional) |
 | 9 | `palette` | palette colors `vec4[]` (GPU spawn, read-only) |
 | 10 | `indirect` | indirect draw args (written by phase 2; read by `glDrawArraysIndirect`) |
+| 11 | `liveIndices` | current live indices; sim/render/sort read; swapped with next list after update |
+| 12 | `nextLiveIndices / sortKeys` | next live-list output during sim; separate cached-depth buffer during sort |
+| 13 | `schedule` | GPU scheduling metadata and indirect compute commands |
 
-> ⚠️ **Breaking change (0.x)**: binding 2 went from "full `Particle[]` staging" to "`SpawnRequest[]` spawn requests" — hosts with custom spawn shaders must migrate to the new contract.
+> ⚠️ **Breaking change (0.x)**: binding 2 went from "full `Particle[]` staging" to "`SpawnRequest[]` spawn requests" — hosts with custom spawn shaders must migrate to the new contract. The built-in shaders' loose uniforms are now std140 uniform blocks (contract above); the `ParticleSystem::setPrograms/setRefraction/setSoftParticles` members were removed in favor of the `ember/opengl.hpp` free functions `setOpenGLPrograms(sys.backend(), ...)` / `setOpenGLRefraction(sys, ...)` / `setOpenGLSoftParticles(sys, ...)` — the public facade no longer exposes GL types, so non-GL backends need not define behavior for them.
 
-sim uniforms: `uDt uTime uPhase uForceMask uGravity uDrag uDragMode uWind uTurbulence uAttractorCount uVortexCount uSpringCount uNoiseWindDir uNoiseWindAmp uNoiseWindScale uNoiseWindSpeed uWaveDir uWaveK uWaveAmp uWaveOmega uBoundaryMode uBoundaryY uRestitution uSpawnTotal uFrameSeed` (`uPhase=0` integrate, `=1` spawn, `=2` write indirect args — three dispatches; `uSpawnTotal` = total particles requested this frame, `uFrameSeed` = GPU spawn RNG seed; `uForceMask` bit i = `ember::Force` value i, disabled forces cost nothing); render VS uniforms: `uView uProj uSizeScale uStreak uUseSorted` (`uUseSorted=1` reads particles via `sorted[gl_InstanceID]`, else `gl_InstanceID`; `uStreak>0` stretches quads along the view-projected velocity); render FS uniforms: `uSprite uUseSprite uSheetCols uSheetRows uSceneDepth uInvViewProj uSoftRadius uViewportSize uUseSoft` (`uUseSprite=1` texture + frame animation, `=0` procedural glow; `uUseSoft=1` fades near scene depth; `vFadeRGB` comes from `life.yzw` for the fade-to-color effect).
+The built-in shaders no longer use loose uniforms — every scalar lives in a std140 uniform block (the same GLSL compiles to SPIR-V as-is; CPU mirrors with layout asserts are in `src/backends/opengl/params.hpp`): simulation `SimParams` (binding 14; `uPhase=0` integrate live indices, `=3` reserve birth slots, `=1` spawn, `=2` publish indirect args — up to four dispatches; `uSpawnTotal` = total particles requested this frame, `uFrameSeed` = GPU spawn RNG seed; `uForceMask` bit i = `ember::Force` value i, disabled forces cost nothing); render VS `DrawParams` (binding 17; `uUseSorted=1` reads particles via `sorted[gl_InstanceID]`, else `liveIndices[gl_InstanceID]`; `uStreak>0` stretches quads along the view-projected velocity); render FS `FragParams` (binding 18; `uUseSprite=1` texture + frame animation, `=0` procedural glow; `uUseSoft=1` fades near scene depth; `vFadeRGB` comes from `life.yzw` for the fade-to-color effect); sort `SortParams` (15), internal scheduling `ScheduleParams` (16), bloom `BloomParams` (19). Samplers carry explicit bindings: `uSprite`=0, `uSceneDepth`=1, `uSceneColor`=2; stage varyings carry explicit locations. Block members without an instance name share one global namespace, so the fragment block renames `uProj`/`uRefraction` to `uFragProj`/`uFragRefraction`. The backend still writes the legacy loose uniforms too, so custom shaders written against the old contract keep working; new custom shaders should declare the same block members (protocol detection sees block members as well).
 
 ## Embedding
 
@@ -203,12 +226,20 @@ See **[INTEGRATION.en.md](INTEGRATION.en.md)** (or the Chinese [INTEGRATION.md](
 
 ## Performance
 
-- Rendering is decoupled from the CPU readback: the instance count comes from a GPU-written indirect args buffer; per frame the CPU→GPU traffic is a few spawn requests (`emitter count × 176 B`) and the GPU→CPU traffic is a single 16-byte alive counter (for `aliveCount()`/UI only)
-- Size `capacity` for the worst-case live count (memory = capacity × 64 B × 2 + free stack × 4 B + sort indices × 4 B); steady state ≈ spawn rate × average lifetime
-  - 1M particles ≈ **130 MB** VRAM (two 64 MB particle buffers + 4 MB free stack + 4 MB sort indices); 4M ≈ 520 MB
-- Reference measurement (local AMD driver, GL 4.3): `config/stress.ini` (1M capacity, post-processing off) holds **~850k live particles at ~166 fps**
-- If the spawn rate stays below the death rate for a long time, the ring free-stack may drop its oldest entries (those slots stay corpses — no visual artifacts)
-- Optional post-processing is opt-in (all off by default, zero cost): bloom = 3 half-res RGBA16F FBOs + 2 Gaussian blur passes per frame; depth sort = ~log²N tiny compare-exchange dispatches (≈171 at N=262144, ≈400 at N=1M — off by default; for huge counts reduce sort frequency or switch to a radix sort)
+Reproducible CPU/GPU benchmarks, measurement definitions, and recorded results are documented in [benchmarks/README.md](benchmarks/README.md). Build with `-DEMBER_BUILD_BENCHMARKS=ON`, then run `python tools/run_benchmarks.py --output out/baseline-local`.
+
+- Default mode synchronously reads five counters (20 B) per update. Opt in with `sys.setGpuDriven(true)` for GPU-generated integration/sort dispatch and asynchronous telemetry; use `pollStatistics()` for UI. `aliveCount()` stays exact and may wait. See [integration guide](INTEGRATION.en.md#gpu-scheduling-and-asynchronous-statistics-opt-in).
+- Particle storage: capacity × 128 B for particles, × 4 B for free indices, × 8 B for live-index ping-pong, plus nextPow2(capacity) × 4 B for sorted indices. Sorting lazily allocates up to another nextPow2(capacity) × 4 B for cached depth keys.
+  - 1M capacity uses about 144 MB (138 MiB), or 148 MB (142 MiB) with a full depth-key cache, excluding requests, palettes and post-processing.
+- The benchmark report records the first measurements after the lifecycle fixes; measure again on the target GPU and actual integration workload.
+- Retired slots remain in the free stack; no entries are dropped. Built-in integration and rendering visit only live indices; legacy custom simulation shaders can still scan the allocated extent.
+- Optional post-processing is opt-in (all off by default): bloom = one full-res and two half-res RGBA16F FBOs + 2 Gaussian blur passes per frame; depth sort caches depth keys and merges intra-tile steps in shared memory (256-entry tiles), totaling 66 dispatches at N=262144 or 91 at N=1M, including initialization. Ordering remains exact, far to near.
+
+## Validation and shader compatibility
+
+Run `ctest --test-dir build --output-on-failure`. GL suites cover lifecycle, sorting, bloom/occlusion, refraction, embedded fallback and callback regressions; Python checks verify generated artifacts.
+
+See [INTEGRATION.en.md](INTEGRATION.en.md) for the optimized shader protocol and legacy fallback. Binding 12 and three trailing counter words are new; the first five counters, 32-byte Spring arrays and uInvProj = inverse(proj) are unchanged. Requests are capped at 4096 entries and `maxSpawnPerFrame` particles; bursts precede emitters. Edit shaders, run `python tools/sync_embedded_shaders.py`, then `python tools/amalgamate.py`.
 
 ## License
 

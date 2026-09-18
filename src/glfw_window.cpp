@@ -3,18 +3,31 @@
 #include "ember/gl.hpp"
 
 #include <stdexcept>
+#include <exception>
 
 namespace ember {
 
 namespace {
+thread_local std::exception_ptr g_callbackError;
+template<class F> void callback(F&& f) noexcept {
+    try { f(); } catch (...) { if (!g_callbackError) g_callbackError = std::current_exception(); }
+}
 int g_glfwRefs = 0; // refcount for glfwInit/glfwTerminate
+[[noreturn]] void contextFailure(int code, const char* message) {
+    if (code == GLFW_API_UNAVAILABLE || code == GLFW_VERSION_UNAVAILABLE ||
+        code == GLFW_PLATFORM_UNAVAILABLE || code == GLFW_PLATFORM_ERROR ||
+        code == GLFW_FORMAT_UNAVAILABLE)
+        throw ContextUnavailable(message);
+    throw std::runtime_error(message);
+}
 }
 
 Window::Window(int width, int height, const char* title, int samples, bool vsync, bool visible) {
     if (g_glfwRefs++ == 0) {
         if (!glfwInit()) {
+            const int error = glfwGetError(nullptr);
             --g_glfwRefs;
-            throw std::runtime_error("ember: glfwInit failed");
+            contextFailure(error, "ember: glfwInit failed");
         }
     }
     glfwWindowHint(GLFW_VISIBLE, visible ? GLFW_TRUE : GLFW_FALSE);
@@ -27,11 +40,12 @@ Window::Window(int width, int height, const char* title, int samples, bool vsync
 #endif
     w_ = glfwCreateWindow(width, height, title, nullptr, nullptr);
     if (!w_) {
+        const int error = glfwGetError(nullptr);
         if (--g_glfwRefs == 0) glfwTerminate();
-        throw std::runtime_error("ember: failed to create GLFW window (needs OpenGL 4.3 core)");
+        contextFailure(error, "ember: failed to create GLFW window (needs OpenGL 4.3 core)");
     }
     glfwMakeContextCurrent(w_);
-    if (!gl::init(reinterpret_cast<void* (*)(const char*)>(glfwGetProcAddress))) {
+    if (!gl::init(glfwGetProcAddress)) {
         glfwDestroyWindow(w_);
         w_ = nullptr;
         if (--g_glfwRefs == 0) glfwTerminate();
@@ -52,8 +66,25 @@ Window::~Window() {
     if (--g_glfwRefs <= 0) glfwTerminate();
 }
 
+void Window::checkCallbacks() {
+    if (g_callbackError) {
+        auto error = g_callbackError;
+        g_callbackError = nullptr;
+        std::rethrow_exception(error);
+    }
+}
+
+void Window::setVsync(bool on) {
+    GLFWwindow* previous = glfwGetCurrentContext();
+    if (previous != w_) glfwMakeContextCurrent(w_);
+    glfwSwapInterval(on ? 1 : 0);
+    if (previous != w_) glfwMakeContextCurrent(previous);
+    checkCallbacks();
+}
+
 void Window::pollEvents() {
     glfwPollEvents();
+    checkCallbacks();
     const double t = glfwGetTime();
     lastDt_ = (float)(t - lastTime_);
     lastTime_ = t;
@@ -86,22 +117,22 @@ glm::vec2 Window::scrollDelta() {
 // ---- static callbacks -----------------------------------------------------
 
 void Window::keyCb(GLFWwindow* w, int key, int sc, int act, int mods) {
-    if (auto* s = fromHandle(w); s && s->onKey) s->onKey(key, sc, act, mods);
+    if (auto* s = fromHandle(w); s && s->onKey) callback([&] { s->onKey(key, sc, act, mods); });
 }
 void Window::cursorCb(GLFWwindow* w, double x, double y) {
-    if (auto* s = fromHandle(w); s && s->onCursorPos) s->onCursorPos(x, y);
+    if (auto* s = fromHandle(w); s && s->onCursorPos) callback([&] { s->onCursorPos(x, y); });
 }
 void Window::mouseCb(GLFWwindow* w, int b, int act, int mods) {
-    if (auto* s = fromHandle(w); s && s->onMouseButton) s->onMouseButton(b, act, mods);
+    if (auto* s = fromHandle(w); s && s->onMouseButton) callback([&] { s->onMouseButton(b, act, mods); });
 }
 void Window::scrollCb(GLFWwindow* w, double x, double y) {
     if (auto* s = fromHandle(w)) {
         s->scrollAccum_ += glm::vec2((float)x, (float)y);
-        if (s->onScroll) s->onScroll(x, y);
+        if (s->onScroll) callback([&] { s->onScroll(x, y); });
     }
 }
 void Window::resizeCb(GLFWwindow* w, int width, int height) {
-    if (auto* s = fromHandle(w); s && s->onResize) s->onResize(width, height);
+    if (auto* s = fromHandle(w); s && s->onResize) callback([&] { s->onResize(width, height); });
 }
 
 } // namespace ember

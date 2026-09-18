@@ -1,76 +1,88 @@
 #version 430 core
-// GPU bitonic sort of alive particle indices by view-space depth.
-//
-// Host protocol (one dispatch per step, see ParticleSystem::sortParticles):
-//   uMode = 0   identity fill: sorted[i] = i for i < uAlive
-//   uMode = 1   one compare-exchange step for bitonic stage uK / step uJ
-//               (classic network: for k = 2; k <= N; k <<= 1
-//                                 for j = k/2; j > 0; j >>= 1  dispatch)
-//
-// In-place on a single buffer: within one step every element is read/written
-// by exactly one thread (the lower index of each pair owns the swap), so there
-// is no cross-workgroup race; the host issues a glMemoryBarrier between steps.
-// uPaddedN is the smallest power of two >= uAlive; threads past N must not
-// touch the buffer (their pairs would collide with valid threads' pairs).
-//
-// Result: sorted[0..uAlive) = alive particle indices, far-to-near (ascending
-// view-space z = descending depth), which yields correct alpha blending when
-// quads are drawn in that order. Padding entries (idx >= uAlive) carry the
-// key +1e30 and sink to the end of the ascending sequence — never drawn.
+// Exact back-to-front bitonic sort with cached depth keys and 256-entry tiles.
+// uMode=0 + uTileMode=1: fill and sort alternating tiles in shared memory.
+// uMode=1 + uTileMode=0: one global compare-exchange step (uJ >= 256).
+// uMode=1 + uTileMode=2: finish uJ=128..1 in shared memory for stage uK.
+// All local invocations participate in barriers, including padding lanes.
+// uGpuDriven=1 reads alive from binding 4 and padded N from binding 13 word 1.
+// schedule.comp provides indirect commands; inactive merge stages have X=0.
+layout(local_size_x = 256) in;
 
-layout(local_size_x = 64) in;
-
-struct Particle {
-    vec4 pos;   // xyz position, w = size
-    vec4 vel;   // xyz velocity, w = age
-    vec4 life;  // x = lifetime (negative => corpse slot)
-    vec4 color; // rgba
+struct Particle { vec4 pos; vec4 vel; vec4 life; vec4 color; };
+layout(binding = 0, std430) readonly buffer BufCur { Particle cur[]; };
+layout(binding = 8, std430) buffer BufSorted { uint sorted[]; };
+layout(binding = 11, std430) readonly buffer BufLive { uint liveIndices[]; };
+// Binding 12 is scratch: next live indices during sim, depth keys during sort.
+layout(binding = 12, std430) buffer BufKeys { float keys[]; };
+// Scalar state in one std140 block (Vulkan-compilable; CPU mirror: SortParams
+// in src/backends/opengl/params.hpp).
+layout(binding = 15, std140) uniform SortParams {
+    mat4 uView;
+    uint uCapacity; uint uAlive; uint uPaddedN; uint uK;
+    uint uJ; uint uMode; uint uTileMode; int uGpuDriven;
 };
-layout(binding = 0, std430) readonly buffer BufCur  { Particle cur[]; };
-layout(binding = 8, std430) buffer       BufSorted { uint sorted[]; };
+layout(binding=4,std430) readonly buffer Counters { uint gpuAlive; };
+layout(binding=13,std430) readonly buffer Schedule { uint scheduleWords[]; };
+shared uint tileIndices[256];
+shared float tileKeys[256];
 
-uniform mat4  uView;
-uniform uint  uAlive;
-uniform uint  uPaddedN;  // power of two >= uAlive (buffer holds at least this)
-uniform uint  uK;        // bitonic stage mask (2, 4, 8, ...)
-uniform uint  uJ;        // step within the stage (uK/2 ... 1)
-uniform uint  uMode;     // 0 = identity fill, 1 = compare-exchange step
-
-// View-space z as the sort key: negative in front, so ascending order puts
-// the farthest particle first (back-to-front = correct alpha compositing).
-// Padding entries get +1e30 (the largest key) so they sink to the END of the
-// ascending sequence — they are never drawn.
-float depthKey(uint idx) {
-    if (idx >= uAlive) return 1e30;
-    return (uView * vec4(cur[idx].pos.xyz, 1.0)).z;
+bool greaterKey(float a, uint ai, float b, uint bi) {
+    return a > b || (a == b && ai > bi); // reproducible tie-break by stable slot
 }
-
+float depthKey(uint idx) {
+    if (idx >= uCapacity) return uintBitsToFloat(0x7f800000u);
+    float z = (uView * vec4(cur[idx].pos.xyz, 1.0)).z;
+    return isnan(z) ? uintBitsToFloat(0x7f800000u) : z;
+}
+void tileStep(uint lane, uint globalIndex, uint k, uint j) {
+    uint other = lane ^ j;
+    if (lane < other) {
+        float a = tileKeys[lane], b = tileKeys[other];
+        uint ai = tileIndices[lane], bi = tileIndices[other];
+        bool ascending = (globalIndex & k) == 0u;
+        if (ascending ? greaterKey(a, ai, b, bi) : greaterKey(b, bi, a, ai)) {
+            tileKeys[lane] = b; tileKeys[other] = a;
+            tileIndices[lane] = bi; tileIndices[other] = ai;
+        }
+    }
+    barrier();
+}
 void main() {
-    const uint i = gl_GlobalInvocationID.x;
-    if (i >= uPaddedN) return;         // over-spawned threads: hands off
-
-    if (uMode == 0u) {                 // identity fill
-        // Padding slots (i >= uAlive) get the sentinel uAlive — never a valid
-        // index, so stale values from previous frames can't become duplicates.
-        sorted[i] = (i < uAlive) ? i : uAlive;
+    uint count = uGpuDriven != 0 ? gpuAlive : uAlive;
+    uint paddedN = uGpuDriven != 0 ? scheduleWords[1] : uPaddedN;
+    uint i = gl_GlobalInvocationID.x;
+    uint lane = gl_LocalInvocationID.x;
+    if (uTileMode == 0u) {
+        uint other = i ^ uJ;
+        if (i >= paddedN || other <= i) return;
+        float a = keys[i], b = keys[other];
+        uint ai = sorted[i], bi = sorted[other];
+        bool ascending = (i & uK) == 0u;
+        if (ascending ? greaterKey(a, ai, b, bi) : greaterKey(b, bi, a, ai)) {
+            keys[i] = b; keys[other] = a;
+            sorted[i] = bi; sorted[other] = ai;
+        }
         return;
     }
-
-    // Bitonic compare-exchange on the pair (i, i ^ j); lower index owns it.
-    // The keys must come from the VALUES at those positions (sorted[i] /
-    // sorted[ij] are particle indices), not from the positions themselves.
-    const uint j  = uJ;
-    const uint ij = i ^ j;
-    if (ij <= i) return;
-
-    const float a = depthKey(sorted[i]);
-    const float b = depthKey(sorted[ij]);
-    if (a == b) return;                // ties (incl. padding) stay put
-
-    const bool ascending = (i & uK) == 0u;   // half of the bitonic sequence
-    if (ascending ? (a > b) : (a < b)) {
-        const uint t  = sorted[i];
-        sorted[i]     = sorted[ij];
-        sorted[ij]    = t;
+    uint idx = uCapacity;
+    float key = uintBitsToFloat(0x7f800000u);
+    if (uMode == 0u) {
+        idx = i < count ? liveIndices[i] : uCapacity;
+        key = depthKey(idx);
+    } else if (i < paddedN) {
+        idx = sorted[i]; key = keys[i];
+    }
+    tileIndices[lane] = idx;
+    tileKeys[lane] = key;
+    barrier();
+    if (uMode == 0u) {
+        for (uint k = 2u; k <= 256u; k <<= 1u)
+            for (uint j = k >> 1u; j > 0u; j >>= 1u) tileStep(lane, i, k, j);
+    } else {
+        for (uint j = 128u; j > 0u; j >>= 1u) tileStep(lane, i, uK, j);
+    }
+    if (i < paddedN) {
+        sorted[i] = tileIndices[lane];
+        keys[i] = tileKeys[lane];
     }
 }

@@ -1,0 +1,19 @@
+﻿{
+    "captured_utc":  "2026-09-17T04:32:47.9510555Z",
+    "gpu":  [
+                "pstate, temperature.gpu, power.draw [W], clocks.current.graphics [MHz], clocks.current.memory [MHz], utilization.gpu [%]",
+                "P0, 86, 70.25 W, 2610 MHz, 8001 MHz, 74 %"
+            ],
+    "engines":  [
+                    {
+                        "process":  "VALORANT-Win64-Shipping",
+                        "percent":  49.8,
+                        "engine":  "pid_72260_luid_0x00000000_0x0001540d_phys_0_eng_0_engtype_3d"
+                    },
+                    {
+                        "process":  "ember_benchmark_plain",
+                        "percent":  24.7,
+                        "engine":  "pid_78924_luid_0x00000000_0x0001540d_phys_0_eng_0_engtype_3d"
+                    }
+                ]
+}

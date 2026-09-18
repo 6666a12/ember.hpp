@@ -1,49 +1,89 @@
 @PACKAGE_INIT@
 
-# ember CMake package.
-#
-# The installed library links against glad/glm (and glfw for ember_glfw).
-# Provide those dependencies before calling find_package(ember):
-#   - via your own FetchContent / add_subdirectory, or
-#   - as installed packages (gladConfig.cmake / glmConfig.cmake / glfw3Config.cmake).
-#
-# Usage:
-#   find_package(ember REQUIRED)
-#   target_link_libraries(app PRIVATE ember::ember)          # core only
-#   target_link_libraries(app PRIVATE ember::ember_glfw)     # + GLFW convenience module
-
+# Existing dependency targets are accepted; otherwise locate installed packages.
+# With no COMPONENTS, expose all modules built in this installation.
+# COMPONENTS core permits consuming even a full installation without GL deps.
 include(CMakeFindDependencyMacro)
-find_dependency(glm)
-find_dependency(glad)
-find_dependency(glfw3 QUIET)   # only needed when consuming ember::ember_glfw
-
-# Helper: append a dependency target to an imported ember target if it exists
-# under either its plain name or its namespaced name.
-function(_ember_append_dep _imported _dep)
-  if(TARGET "${_dep}")
-    set_property(TARGET "${_imported}" APPEND PROPERTY INTERFACE_LINK_LIBRARIES "${_dep}")
-  elseif(TARGET "${_dep}::${_dep}")
-    set_property(TARGET "${_imported}" APPEND PROPERTY INTERFACE_LINK_LIBRARIES "${_dep}::${_dep}")
+set(_ember_prefix "${PACKAGE_PREFIX_DIR}")
+set(ember_core_FOUND TRUE)
+set(ember_opengl_FOUND @EMBER_BUILD_OPENGL@)
+set(ember_vulkan_FOUND @EMBER_HAVE_VULKAN@)
+set(ember_glfw_FOUND FALSE)
+if(@EMBER_BUILD_OPENGL@ AND @EMBER_BUILD_GLFW@)
+  set(ember_glfw_FOUND TRUE)
+endif()
+if(NOT ember_FIND_COMPONENTS)
+  set(ember_FIND_COMPONENTS core)
+  foreach(_module IN ITEMS opengl glfw vulkan)
+    if(ember_${_module}_FOUND)
+      list(APPEND ember_FIND_COMPONENTS ${_module})
+    endif()
+  endforeach()
+endif()
+set(_ember_modules core)
+foreach(_module IN LISTS ember_FIND_COMPONENTS)
+  if(_module STREQUAL "core" OR _module STREQUAL "opengl" OR _module STREQUAL "glfw" OR _module STREQUAL "vulkan")
+    if(ember_${_module}_FOUND)
+      list(APPEND _ember_modules ${_module})
+      if(_module STREQUAL "glfw")
+        list(APPEND _ember_modules opengl)
+      endif()
+    endif()
+  else()
+    set(ember_${_module}_FOUND FALSE)
   endif()
-endfunction()
-
-if(NOT TARGET ember::ember)
-  add_library(ember::ember STATIC IMPORTED)
-  set_target_properties(ember::ember PROPERTIES
-    IMPORTED_LOCATION "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/@CMAKE_STATIC_LIBRARY_PREFIX@ember@CMAKE_STATIC_LIBRARY_SUFFIX@"
-    INTERFACE_INCLUDE_DIRECTORIES "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_INCLUDEDIR@")
-  _ember_append_dep(ember::ember glad)
-  _ember_append_dep(ember::ember glm)
-endif()
-
-if(NOT TARGET ember::ember_glfw)
-  add_library(ember::ember_glfw STATIC IMPORTED)
-  set_target_properties(ember::ember_glfw PROPERTIES
-    IMPORTED_LOCATION "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/@CMAKE_STATIC_LIBRARY_PREFIX@ember_glfw@CMAKE_STATIC_LIBRARY_SUFFIX@"
-    INTERFACE_INCLUDE_DIRECTORIES "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_INCLUDEDIR@")
-  _ember_append_dep(ember::ember_glfw glad)
-  _ember_append_dep(ember::ember_glfw glm)
-  _ember_append_dep(ember::ember_glfw glfw)
-endif()
-
+endforeach()
 check_required_components(ember)
+if(DEFINED ember_FOUND AND NOT ember_FOUND)
+  return()
+endif()
+
+if(NOT TARGET glm AND NOT TARGET glm::glm)
+  find_dependency(glm)
+endif()
+if("opengl" IN_LIST _ember_modules AND NOT TARGET glad AND NOT TARGET glad::glad)
+  find_dependency(glad)
+endif()
+if("glfw" IN_LIST _ember_modules AND NOT TARGET glfw AND NOT TARGET glfw::glfw)
+  find_dependency(glfw3)
+endif()
+if("vulkan" IN_LIST _ember_modules)
+  find_dependency(Vulkan)
+endif()
+foreach(_dep IN ITEMS glm glad glfw)
+  if(TARGET ${_dep})
+    set(_ember_${_dep} ${_dep})
+  elseif(TARGET ${_dep}::${_dep})
+    set(_ember_${_dep} ${_dep}::${_dep})
+  endif()
+endforeach()
+
+function(_ember_import _target _archive)
+  add_library(${_target} STATIC IMPORTED)
+  set_target_properties(${_target} PROPERTIES
+    IMPORTED_LOCATION "${_ember_prefix}/@CMAKE_INSTALL_LIBDIR@/@CMAKE_STATIC_LIBRARY_PREFIX@${_archive}@CMAKE_STATIC_LIBRARY_SUFFIX@"
+    INTERFACE_INCLUDE_DIRECTORIES "${_ember_prefix}/@CMAKE_INSTALL_INCLUDEDIR@"
+    INTERFACE_COMPILE_FEATURES cxx_std_17)
+endfunction()
+if(NOT TARGET ember::core)
+  _ember_import(ember::core ember_core)
+  set_property(TARGET ember::core PROPERTY INTERFACE_LINK_LIBRARIES "${_ember_glm}")
+endif()
+if("opengl" IN_LIST _ember_modules AND NOT TARGET ember::ember)
+  _ember_import(ember::ember ember)
+  set_property(TARGET ember::ember PROPERTY INTERFACE_LINK_LIBRARIES "ember::core;${_ember_glad}")
+endif()
+if("opengl" IN_LIST _ember_modules AND NOT TARGET ember::opengl)
+  add_library(ember::opengl INTERFACE IMPORTED)
+  set_property(TARGET ember::opengl PROPERTY INTERFACE_LINK_LIBRARIES ember::ember)
+endif()
+if("glfw" IN_LIST _ember_modules AND NOT TARGET ember::ember_glfw)
+  _ember_import(ember::ember_glfw ember_glfw)
+  set_property(TARGET ember::ember_glfw PROPERTY INTERFACE_LINK_LIBRARIES "ember::opengl;${_ember_glfw}")
+endif()
+if("vulkan" IN_LIST _ember_modules AND NOT TARGET ember::vulkan)
+  _ember_import(ember::vulkan ember_vulkan)
+  set_property(TARGET ember::vulkan PROPERTY INTERFACE_LINK_LIBRARIES "ember::core;${Vulkan_LIBRARIES}")
+  set_property(TARGET ember::vulkan PROPERTY INTERFACE_INCLUDE_DIRECTORIES
+    "${_ember_prefix}/@CMAKE_INSTALL_INCLUDEDIR@;${Vulkan_INCLUDE_DIRS}")
+endif()
