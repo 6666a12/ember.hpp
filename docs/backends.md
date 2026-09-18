@@ -21,7 +21,8 @@
 | Vulkan 模拟 | `src/backends/vulkan/resources.cpp`、`simulation.cpp`、`statistics.cpp` | 缓冲/描述符/管线、phase 链、GPU 调度与异步统计环 |
 | Vulkan 排序 | `src/backends/vulkan/sort.cpp` | 分块 bitonic 深度键排序（同步与 GPU 调度两模式） |
 | Vulkan 渲染 | `src/backends/vulkan/render.cpp`、`sprite.cpp`、`bloom.cpp` | 帧目标注入、render pass/管线缓存、billboard 间接绘制、贴图、软粒子、折射、bloom |
-| Vulkan 骨架 | `src/backends/vulkan/`、`tools/embed_spirv.py` | 骨架与构建期 SPIR-V 内嵌兜底 |
+| Vulkan 宿主集成 | `src/backends/vulkan/context.cpp`、`options.cpp` | 上下文/帧目标/宿主纹理注入、能力选项、宿主 command buffer 录入 |
+| SPIR-V 构建 | `tools/embed_spirv.py`、CMake `ember_spirv` | 构建期 GLSL→SPIR-V 与内嵌 |
 | 可选窗口 | `include/ember/glfw_window.hpp`、`src/glfw_window.cpp` | GLFW 上下文与事件便利模块 |
 
 `ParticleSystem` 不再持有 GL 资源或发出 GL 调用。它独占一个后端实例；移动系统仅转移所有权，后端地址及内部缓冲区引用保持稳定。移动后的源对象只能析构或重新赋值。
@@ -51,7 +52,7 @@ ctest --test-dir build-core --output-on-failure
 
 GL 后端使用宿主上下文时可设置 `-DEMBER_BUILD_GLFW=OFF`，此时不会构建需要窗口模块的示例、GL 测试；基准程序仍要求开启 GL 和 GLFW。两项选项默认 ON，原有构建命令继续有效。
 
-构建期 SPIR-V：内置 GLSL 已满足 Vulkan 约束（无散 uniform、显式 binding/location、std140 参数块），默认 `-DEMBER_BUILD_SPIRV=ON` 时若找到 glslangValidator，`ember_spirv` 目标把 `shaders/` 全部编译到 `build/generated/spirv/`（`--target-env vulkan1.0`）。同一 GLSL 同时服务 GL（文本）与 Vulkan（二进制），SPIR-V 随源码构建始终同步；未来 Vulkan 后端直接加载这些二进制，无运行时编译器依赖。后端仍向散 uniform 写相同数值，旧契约自定义 shader 不变。
+构建期 SPIR-V：内置 GLSL 已满足 Vulkan 约束（无散 uniform、显式 binding/location、std140 参数块），默认 `-DEMBER_BUILD_SPIRV=ON` 时若找到 glslangValidator，`ember_spirv` 目标把 `shaders/` 全部编译到 `build/generated/spirv/`（`--target-env vulkan1.0`）。同一 GLSL 同时服务 GL（文本）与 Vulkan（二进制），SPIR-V 随源码构建始终同步；Vulkan 后端直接加载这些二进制，无运行时编译器依赖。后端仍向散 uniform 写相同数值，旧契约自定义 shader 不变。
 
 安装包接受 `find_package(ember REQUIRED COMPONENTS core)`、`COMPONENTS opengl` 或 `COMPONENTS glfw`。不写组件时加载该安装中构建的全部模块。依赖由消费方提供已有 CMake 目标，或由包配置寻找已安装依赖；只选 core 不要求 GL 依赖。静态库手工链接时，GL 路径需要 `ember` **以及** `ember_core`，再链接 glad 和宿主窗口库。
 
@@ -90,7 +91,7 @@ sys.setSoftParticleParameters(true, 0.5f);
 - **生命周期曲线**：系统级 color-over-life / size-over-life，facade 把用户 keys 烘焙为 64 项 LUT，shader 恒乘（关闭 = 全 1，逐位等价于未启用）；曲线只影响渲染，不进入模拟状态与对拍。
 - **跨后端一致性**：同一指令流（相同设置、种子、发射器、burst、力场、dt 序列）驱动不同后端，粒子数量与统计必须逐帧精确相等，粒子内容按多重集在浮点容差内相等。槽位顺序只在无死亡时属于契约（纯追加出生是确定性整数逻辑）；一旦有粒子死亡，空槽栈的 `atomicAdd` 压栈顺序取决于 GPU 线程调度，槽位→粒子映射即使在同一后端的两次运行间也只是排列等价。数值上两后端编译同一 GLSL（GL 驱动文本编译 vs glslang SPIR-V），fma 收缩差异会经湍流噪声反馈放大，实测 30 帧全力量级约 5e-4，非混沌路径在 1e-6 量级。`cross_backend_test`（GL + Vulkan 同步 + Vulkan GPU 调度三条腿，回收相位另加一条 GL 腿佐证排列是同后端属性）逐帧执行该对拍。
 - **原生资源**：GL 宿主颜色/深度纹理只借用、不删除；渲染完成前必须有效，不能与当前写入的目标形成反馈。非 GL 后端传入 GL 适配函数会被拒绝。所有 GL 操作及析构要求所属上下文 current。
-- **坐标与深度约定**：传给 `render()` 的投影矩阵、以及软粒子/折射采样的宿主深度纹理遵循 **GL 约定**——NDC z ∈ [-1, 1]、帧缓冲原点左下、屏幕 UV 原点左下（片元着色器用 `uInvProj` 按此约定重建观察空间位置）。使用 [0,1] 深度或左上原点的宿主（Vulkan 常见，含 reversed-Z）必须自行在投影矩阵与深度导出中适配；未来 Vulkan 后端的 shader 自带对应约定，本条仅约束当前 GL 后端。
+- **坐标与深度约定**：传给 `render()` 的投影矩阵、以及软粒子/折射采样的宿主深度纹理遵循 **GL 约定**——NDC z ∈ [-1, 1]、帧缓冲原点左下、屏幕 UV 原点左下（片元着色器用 `uInvProj` 按此约定重建观察空间位置）。使用 [0,1] 深度或左上原点的宿主（Vulkan 常见，含 reversed-Z）必须自行在投影矩阵与深度导出中适配；内置 shader 已带 `EMBER_CLIP_VULKAN` 重映射，宿主可以继续传 GL 风格投影矩阵。
 
 ## Vulkan 的选择性接入顺序
 

@@ -19,8 +19,8 @@ cmake -S . -B build && cmake --build build -j
 
 # 测试：必须先修 PATH（mingw64/ucrt64 运行时混用会导致 0xc0000139/SEGFAULT）
 export PATH=/e/msys2/ucrt64/bin:$PATH
-ctest --test-dir build --output-on-failure        # 基线：9/9 全绿，GPU 测试真实执行
-ctest --test-dir build-core --output-on-failure   # 纯 core 构建：5/5
+ctest --test-dir build --output-on-failure        # 基线：11/11 全绿，GPU 测试真实执行
+ctest --test-dir build-core --output-on-failure   # 纯 core 构建：6/6
 
 # 改了 shaders/ 任何文件之后，必须依次：
 python tools/sync_embedded_shaders.py
@@ -41,8 +41,8 @@ python tools/amalgamate.py
 1. **不得修改 `ParticleBackend` 公共契约**（`include/ember/backend.hpp`）、
    数据协议（`core.hpp`/`emitters.hpp`/`particle_types.hpp`）和公共 facade
    的行为语义。新增能力走新文件，不改既有签名。
-2. **GL 必须始终全绿**：每完成一步跑 `ctest --test-dir build`（9/9）与
-   `build-core`（5/5）。任何一张工单合入时这两组不能红。
+2. **GL 必须始终全绿**：每完成一步跑 `ctest --test-dir build`（11/11）与
+   `build-core`（6/6）。任何一张工单合入时这两组不能红。
 3. 命名空间：`ember::detail::vulkan`（后端内部）/ `ember`（公开适配 free function）。
 4. 不引入 VMA、不用 dynamic rendering（经典 VkRenderPass）、不接管交换链、
    不多队列、不做 GL↔Vulkan 资源共享。Vulkan 基线 1.1（负 viewport 高度）。

@@ -1,6 +1,6 @@
 # ember
 
-基于**现代 OpenGL（4.3 core）**的 GPU 粒子动画库。仿真跑在 compute shader 上，渲染用 instanced billboard quad（视图对齐四边形）。核心库**不依赖任何窗口系统**，可嵌入任意 C++ 技术栈（GLFW / SDL2 / Qt / Win32 / EGL / 自有引擎），也提供**单头文件版**（`single_header/ember.hpp`，一个文件注入整个库）。
+基于**现代 OpenGL（4.3 core）** 和 **Vulkan 1.1** 的 GPU 粒子动画库。仿真跑在 compute shader 上，渲染用 instanced billboard quad（视图对齐四边形）。核心库**不依赖任何窗口系统**，可嵌入任意 C++ 技术栈（GLFW / SDL2 / Qt / Win32 / EGL / 自有引擎），也提供**单头文件版**（`single_header/ember.hpp`，一个文件注入整个库）。
 
 > 🌏 English: [README.en.md](README.en.md) · 嵌入指南: [INTEGRATION.md](INTEGRATION.md) / [INTEGRATION.en.md](INTEGRATION.en.md)
 
@@ -155,10 +155,11 @@ strength = 60
 ### 默认同步模式的帧管线
 
 ```
-CPU 编码出生请求(发射器+burset, ~176B/条, 封顶 maxSpawnPerFrame)
+CPU 编码出生请求（发射器+burst，~176B/条，封顶 maxSpawnPerFrame）
    → 请求 SSBO + uSpawnRequestCount + uSpawnTotal
-   → phase=0: 按存活索引积分，死亡入栈，幸存者写下一帧索引 [barrier]
-   → phase=3: 单 invocation 批量预留回收/追加槽位（有出生时）[barrier]
+   → phase=0: 按存活索引积分，死亡入栈，幸存者写下一帧索引；死亡/反弹按槽位标签入事件队列 [barrier]
+   → phase=4: 事件压缩（有事件模板时）：子实例前缀和与预算截断 [barrier]
+   → phase=3: 单 invocation 批量预留回收/追加槽位（有出生时，含事件子粒子）[barrier]
    → phase=1: GPU 采样出生，写粒子与下一帧索引（有出生时）[barrier]
    → phase=2: 单 invocation 发布间接绘制实例数 [barrier]
    → 读回前五个计数器（20 B）→ swap 粒子缓冲与存活索引缓冲
@@ -236,7 +237,7 @@ setOpenGLPrograms(sys.backend(), std::move(render), std::move(sim));
 
 ## 验证与 Shader 兼容性
 
-运行 `ctest --test-dir build --output-on-failure`。GPU 测试覆盖生命周期、排序、Bloom/遮挡、折射、内嵌回退和回调；Python 检查生成文件同步。
+运行 `ctest --test-dir build --output-on-failure`。GPU 测试覆盖生命周期、事件子发射、排序、Bloom/遮挡、折射、软粒子、生命周期曲线、宿主 command buffer 与内嵌回退；`cross_backend_test` 对同一指令流逐帧对拍 GL / Vulkan 同步 / Vulkan GPU 调度三条腿的模拟状态一致性；Python 检查生成文件同步。
 
 Shader 优化协议与旧版兼容路径见 [INTEGRATION.md](INTEGRATION.md)。新增 binding 12 与三个计数器尾部字段；前五个计数器、32 字节 `Spring` 数组、`uInvProj = inverse(proj)` 保持不变。请求同时受 4096 条请求和 `maxSpawnPerFrame` 粒子预算限制，burst 先于 emitter 接受。编辑 Shader 后先运行 `python tools/sync_embedded_shaders.py`，再运行 `python tools/amalgamate.py`。
 

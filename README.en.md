@@ -158,8 +158,9 @@ In code: `sys.loadConfig("config/example.ini")` or `sys.apply(Config::fromFile(.
 ```
 CPU encodes spawn requests (emitters + bursts, ~176 B each, capped at maxSpawnPerFrame)
    → request SSBO + uSpawnRequestCount + uSpawnTotal
-   → phase=0: integrate live indices, retire slots, append survivors to next list [barrier]
-   → phase=3: reserve the whole free/append batch (when spawning) [barrier]
+   → phase=0: integrate live indices, retire slots, append survivors to next list; death/bounce events queue per slot tags [barrier]
+   → phase=4: event compaction (with event templates): child prefix sums and budget clamp [barrier]
+   → phase=3: reserve the whole free/append batch (when spawning, event children included) [barrier]
    → phase=1: sample particles and append their indices (when spawning) [barrier]
    → phase=2: publish indirect instanceCount in one invocation [barrier]
    → read first five counters (20 B) → swap particles and live-index lists
@@ -237,7 +238,7 @@ Reproducible CPU/GPU benchmarks, measurement definitions, and recorded results a
 
 ## Validation and shader compatibility
 
-Run `ctest --test-dir build --output-on-failure`. GL suites cover lifecycle, sorting, bloom/occlusion, refraction, embedded fallback and callback regressions; Python checks verify generated artifacts.
+Run `ctest --test-dir build --output-on-failure`. The GPU suites cover lifecycle, event sub-emission, sorting, bloom/occlusion, refraction, soft particles, lifecycle curves, host command-buffer recording and embedded-fallback regressions; `cross_backend_test` replays one command stream across GL / Vulkan-sync / Vulkan-GPU-scheduling legs and compares the simulation state frame by frame; Python checks verify generated artifacts.
 
 See [INTEGRATION.en.md](INTEGRATION.en.md) for the optimized shader protocol and legacy fallback. Binding 12 and three trailing counter words are new; the first five counters, 32-byte Spring arrays and uInvProj = inverse(proj) are unchanged. Requests are capped at 4096 entries and `maxSpawnPerFrame` particles; bursts precede emitters. Edit shaders, run `python tools/sync_embedded_shaders.py`, then `python tools/amalgamate.py`.
 
